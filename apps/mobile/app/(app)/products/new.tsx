@@ -1,19 +1,28 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Button } from '../../../src/components/common/Button';
 import { Card } from '../../../src/components/common/Card';
 import { Input } from '../../../src/components/common/Input';
 import { productsApi } from '../../../src/features/products/api/productsApi';
-import { parseMoneyInput } from '../../../src/utils/money';
+import { formatMoney, parseMoneyInput } from '../../../src/utils/money';
+
+function getErrorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback;
+}
 
 export default function NewProductScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+
   const [name, setName] = useState('');
   const [priceInput, setPriceInput] = useState('');
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [categoryLoading, setCategoryLoading] = useState(false);
   const [error, setError] = useState('');
 
   const { data: unitsRes } = useQuery({
@@ -21,32 +30,69 @@ export default function NewProductScreen() {
     queryFn: () => productsApi.getUnits(),
   });
 
+  const { data: categoriesRes, refetch: refetchCategories } = useQuery({
+    queryKey: ['productCategories'],
+    queryFn: () => productsApi.getCategories(),
+  });
+
   const units = unitsRes?.data || [];
+  const categories = categoriesRes?.data || [];
+  const parsedPrice = parseMoneyInput(priceInput);
+  const selectedUnit = units.find((unit) => unit.id === selectedUnitId);
+
+  const handleCreateCategory = async () => {
+    const categoryName = newCategoryName.trim();
+    if (!categoryName) {
+      setError('اكتب اسم التصنيف الجديد أولا');
+      return;
+    }
+
+    try {
+      setCategoryLoading(true);
+      setError('');
+      const res = await productsApi.createCategory({ name: categoryName });
+      setSelectedCategoryId(res.data.id);
+      setNewCategoryName('');
+      await refetchCategories();
+      queryClient.invalidateQueries({ queryKey: ['productCategories'] });
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'تعذر إضافة التصنيف'));
+    } finally {
+      setCategoryLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
+    const productName = name.trim();
+
+    if (!productName) {
       setError('اسم المنتج مطلوب');
       return;
     }
 
     if (!selectedUnitId) {
-      setError('يرجى اختيار وحدة القياس (كروز، حبة...)');
+      setError('اختر وحدة القياس مثل كروز أو حبة');
       return;
     }
 
-    const priceMinor = parseMoneyInput(priceInput);
+    if (parsedPrice < 0) {
+      setError('السعر يجب أن يكون صفرا أو أكثر');
+      return;
+    }
 
     try {
       setLoading(true);
       setError('');
       await productsApi.createProduct({
-        name: name.trim(),
+        name: productName,
         unitId: selectedUnitId,
-        currentPrice: priceMinor,
+        categoryId: selectedCategoryId || undefined,
+        currentPrice: parsedPrice,
       });
-      router.back();
-    } catch (err: any) {
-      setError(err.message || 'حدث خطأ في إضافة المنتج');
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      router.replace('/(app)/products');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'تعذر حفظ المنتج'));
     } finally {
       setLoading(false);
     }
@@ -54,37 +100,91 @@ export default function NewProductScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Card>
-        <Text style={styles.title}>معلومات المنتج الجديد</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>منتج جديد</Text>
+        <Text style={styles.subtitle}>أضف الصنف مرة واحدة، وسيظهر مباشرة أثناء تجهيز الطلبيات.</Text>
+      </View>
 
-        {error ? <Text style={styles.errorBanner}>{error}</Text> : null}
+      {error ? <Text style={styles.errorBanner}>{error}</Text> : null}
+
+      <Card style={styles.section}>
+        <Text style={styles.sectionTitle}>بيانات المنتج</Text>
 
         <Input
-          label="اسم المنتج *"
-          placeholder="مثال: مالبورو / ال ام / وينستون"
+          label="اسم المنتج"
+          placeholder="مثال: مالبورو أحمر"
           value={name}
           onChangeText={setName}
         />
 
         <Input
-          label="السعر (بالشيكل) *"
+          label="السعر بالشيكل"
           placeholder="مثال: 74 أو 0.50"
           value={priceInput}
           onChangeText={setPriceInput}
           keyboardType="decimal-pad"
         />
 
-        <Text style={styles.label}>وحدة القياس *</Text>
-        <View style={styles.unitsContainer}>
+        <View style={styles.previewRow}>
+          <Text style={styles.previewLabel}>السعر الذي سيستخدم بالفاتورة</Text>
+          <Text style={styles.previewValue}>{formatMoney(parsedPrice)}</Text>
+        </View>
+      </Card>
+
+      <Card style={styles.section}>
+        <Text style={styles.sectionTitle}>التصنيف</Text>
+        <View style={styles.chipsContainer}>
+          <TouchableOpacity
+            style={[styles.chip, selectedCategoryId === null && styles.chipSelected]}
+            onPress={() => setSelectedCategoryId(null)}
+          >
+            <Text style={[styles.chipText, selectedCategoryId === null && styles.chipTextSelected]}>بدون تصنيف</Text>
+          </TouchableOpacity>
+
+          {categories.map((category) => {
+            const isSelected = selectedCategoryId === category.id;
+            return (
+              <TouchableOpacity
+                key={category.id}
+                style={[styles.chip, isSelected && styles.chipSelected]}
+                onPress={() => setSelectedCategoryId(category.id)}
+              >
+                <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{category.name}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={styles.inlineCreateRow}>
+          <View style={styles.inlineInputWrap}>
+            <Input
+              placeholder="تصنيف جديد مثل سجائر"
+              value={newCategoryName}
+              onChangeText={setNewCategoryName}
+              style={styles.inlineInput}
+            />
+          </View>
+          <Button
+            title="إضافة"
+            onPress={handleCreateCategory}
+            loading={categoryLoading}
+            style={styles.inlineButton}
+          />
+        </View>
+      </Card>
+
+      <Card style={styles.section}>
+        <Text style={styles.sectionTitle}>وحدة القياس</Text>
+        <View style={styles.chipsContainer}>
           {units.map((unit) => {
             const isSelected = selectedUnitId === unit.id;
             return (
               <TouchableOpacity
                 key={unit.id}
-                style={[styles.unitChip, isSelected && styles.unitChipSelected]}
+                style={[styles.chip, isSelected && styles.chipSelected]}
                 onPress={() => setSelectedUnitId(unit.id)}
               >
-                <Text style={[styles.unitChipText, isSelected && styles.unitChipTextSelected]}>
+                <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
                   {unit.nameAr} ({unit.nameEn})
                 </Text>
               </TouchableOpacity>
@@ -92,78 +192,44 @@ export default function NewProductScreen() {
           })}
         </View>
 
-        <Button
-          title="حفظ المنتج"
-          onPress={handleSubmit}
-          loading={loading}
-          style={styles.saveBtn}
-        />
+        {selectedUnit ? (
+          <Text style={styles.hint}>يمكن لاحقا إدخال كمية كسرية من هذه الوحدة، مثل 0.5 {selectedUnit.nameAr}.</Text>
+        ) : (
+          <Text style={styles.hint}>اختر الوحدة التي يفهمها التاجر عند البيع.</Text>
+        )}
       </Card>
+
+      <Button
+        title="حفظ المنتج"
+        onPress={handleSubmit}
+        loading={loading}
+        style={styles.saveBtn}
+      />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  content: {
-    padding: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    marginBottom: 16,
-    textAlign: 'right',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
-    marginBottom: 8,
-    textAlign: 'right',
-    marginTop: 8,
-  },
-  unitsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  unitChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#F8FAFC',
-  },
-  unitChipSelected: {
-    backgroundColor: '#0F172A',
-    borderColor: '#0F172A',
-  },
-  unitChipText: {
-    fontSize: 13,
-    color: '#334155',
-    fontWeight: '500',
-  },
-  unitChipTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  saveBtn: {
-    marginTop: 12,
-    backgroundColor: '#0F172A',
-  },
-  errorBanner: {
-    backgroundColor: '#FEE2E2',
-    color: '#991B1B',
-    padding: 10,
-    borderRadius: 8,
-    fontSize: 13,
-    marginBottom: 12,
-    textAlign: 'right',
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  content: { padding: 16, paddingBottom: 32 },
+  header: { marginBottom: 14 },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#0F172A', textAlign: 'right' },
+  subtitle: { fontSize: 14, color: '#64748B', marginTop: 4, textAlign: 'right', lineHeight: 22 },
+  section: { marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#0F172A', marginBottom: 12, textAlign: 'right' },
+  chipsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' },
+  chipSelected: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
+  chipText: { fontSize: 13, color: '#334155', fontWeight: '600' },
+  chipTextSelected: { color: '#FFFFFF' },
+  inlineCreateRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  inlineInputWrap: { flex: 1 },
+  inlineInput: { height: 42 },
+  inlineButton: { width: 96, height: 42, marginVertical: 0, backgroundColor: '#0284C7' },
+  saveBtn: { marginTop: 4, backgroundColor: '#0F172A' },
+  errorBanner: { backgroundColor: '#FEE2E2', color: '#991B1B', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 12, textAlign: 'right' },
+  previewRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 8, padding: 12, marginTop: 4 },
+  previewLabel: { color: '#475569', fontSize: 13, fontWeight: '600' },
+  previewValue: { color: '#0F172A', fontSize: 16, fontWeight: 'bold' },
+  hint: { color: '#64748B', fontSize: 13, lineHeight: 20, textAlign: 'right' },
 });

@@ -1,18 +1,22 @@
 import { Hono } from 'hono';
-import { getDbClient } from '../db/client';
+import { getDbClient, shouldUseLocalFallback } from '../db/client';
 import { NotFoundError } from '../errors/custom.errors';
 import { authMiddleware } from '../middleware/auth.middleware';
 import type { Env, Variables } from '../types/env.types';
-import { createCustomerSchema, updateCustomerSchema } from '../validators/schemas';
+import { createCustomerSchema } from '../validators/schemas';
 
 const customersRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 customersRoutes.use('*', authMiddleware);
 
-// In-Memory Fallback Store for Local Dev
-let fallbackCustomers = [
+// In-memory fallback store for local development without a configured database.
+const fallbackCustomers: any[] = [
   { id: 1, name: 'أحمد المحمود', phone: '0599123456', notes: 'زبون دائم', isActive: true, totalRemaining: 15000, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   { id: 2, name: 'سارة خالد', phone: '0598765432', notes: 'محل السعادة', isActive: true, totalRemaining: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 ];
+
+function isNoDbConfigured(env: Env) {
+  return shouldUseLocalFallback(env);
+}
 
 // GET /api/v1/customers
 customersRoutes.get('/', async (c) => {
@@ -57,10 +61,53 @@ customersRoutes.get('/', async (c) => {
     }));
 
     return c.json({ success: true, data: customers, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } });
-  } catch (_err) {
-    // Fallback in-memory
+  } catch (err) {
+    if (!isNoDbConfigured(c.env)) throw err;
     const filtered = fallbackCustomers.filter((item) => item.name.includes(search) || (item.phone && item.phone.includes(search)));
     return c.json({ success: true, data: filtered, meta: { page: 1, limit: 20, total: filtered.length, totalPages: 1 } });
+  }
+});
+
+// GET /api/v1/customers/:id
+customersRoutes.get('/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+
+  try {
+    const db = getDbClient(c.env);
+    const result = await db.execute({
+      sql: `
+        SELECT c.*, COALESCE(SUM(i.remaining), 0) as total_remaining
+        FROM customers c
+        LEFT JOIN invoices i ON c.id = i.customer_id AND i.payment_status != 'PAID' AND i.order_status != 'CANCELLED'
+        WHERE c.id = ? GROUP BY c.id
+      `,
+      args: [id],
+    });
+
+    if (result.rows.length === 0) {
+      throw new NotFoundError('الزبون غير موجود');
+    }
+
+    const row = result.rows[0]!;
+    return c.json({
+      success: true,
+      data: {
+        id: Number(row.id),
+        name: String(row.name),
+        phone: row.phone ? String(row.phone) : null,
+        notes: row.notes ? String(row.notes) : null,
+        isActive: Boolean(row.is_active),
+        totalRemaining: Number(row.total_remaining),
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at),
+      },
+    });
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    if (!isNoDbConfigured(c.env)) throw err;
+    const cust = fallbackCustomers.find((item) => item.id === id);
+    if (!cust) throw new NotFoundError('الزبون غير موجود');
+    return c.json({ success: true, data: cust });
   }
 });
 
@@ -77,7 +124,8 @@ customersRoutes.post('/', async (c) => {
     });
     const row = result.rows[0]!;
     return c.json({ success: true, data: { id: Number(row.id), name: data.name, phone: data.phone || null, notes: data.notes || null, isActive: true, totalRemaining: 0, createdAt: String(row.created_at), updatedAt: String(row.updated_at) } }, 201);
-  } catch (_err) {
+  } catch (err) {
+    if (!isNoDbConfigured(c.env)) throw err;
     const newCust = { id: fallbackCustomers.length + 1, name: data.name, phone: data.phone || null, notes: data.notes || null, isActive: true, totalRemaining: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     fallbackCustomers.unshift(newCust);
     return c.json({ success: true, data: newCust }, 201);

@@ -7,7 +7,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env; Variables: Varia
   const authHeader = c.req.header('Authorization');
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new UnauthorizedError('رمز الحساب (Token) مفقود');
+    throw new UnauthorizedError('رمز الحساب مفقود');
   }
 
   const token = authHeader.split(' ')[1];
@@ -23,7 +23,7 @@ export const authMiddleware: MiddlewareHandler<{ Bindings: Env; Variables: Varia
     c.set('merchantUsername', String(payload.username));
 
     await next();
-  } catch (_err) {
+  } catch {
     throw new UnauthorizedError('رمز الجلسة منتهي الصلاحية أو غير صالح');
   }
 };

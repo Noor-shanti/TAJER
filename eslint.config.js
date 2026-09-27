@@ -9,6 +9,7 @@ export default [
       "**/node_modules/**",
       "**/dist/**",
       "**/.expo/**",
+      "**/.wrangler/**",
       "**/build/**",
     ],
   },

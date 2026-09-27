@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Button } from '../../../src/components/common/Button';
 import { Card } from '../../../src/components/common/Card';
 import { Input } from '../../../src/components/common/Input';
 import { customersApi } from '../../../src/features/customers/api/customersApi';
 
+function getErrorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback;
+}
+
 export default function NewCustomerScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
@@ -23,14 +29,15 @@ export default function NewCustomerScreen() {
     try {
       setLoading(true);
       setError('');
-      await customersApi.createCustomer({
+      const res = await customersApi.createCustomer({
         name: name.trim(),
         phone: phone.trim() || undefined,
         notes: notes.trim() || undefined,
       });
-      router.back();
-    } catch (err: any) {
-      setError(err.message || 'حدث خطأ في حفظ بيانات الزبون');
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      router.replace(`/(app)/customers/${res.data.id}`);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'تعذر حفظ الزبون'));
     } finally {
       setLoading(false);
     }
@@ -39,28 +46,16 @@ export default function NewCustomerScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Card>
-        <Text style={styles.title}>معلومات الزبون الجديد</Text>
+        <Text style={styles.title}>إضافة زبون جديد</Text>
+        <Text style={styles.subtitle}>بعد الحفظ ستنتقل مباشرة إلى ملف الزبون لإضافة طلبية أو متابعة الذمة.</Text>
 
         {error ? <Text style={styles.errorBanner}>{error}</Text> : null}
 
-        <Input
-          label="اسم الزبون *"
-          placeholder="مثال: أحمد المحمود"
-          value={name}
-          onChangeText={setName}
-        />
-
-        <Input
-          label="رقم الهاتف"
-          placeholder="مثال: 0599000000"
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-        />
-
+        <Input label="اسم الزبون" placeholder="مثال: أحمد المحمود" value={name} onChangeText={setName} />
+        <Input label="رقم الهاتف" placeholder="مثال: 0599000000" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
         <Input
           label="ملاحظات"
-          placeholder="أدخل أي ملاحظات خاصة بالزبون..."
+          placeholder="أي ملاحظات عن الزبون"
           value={notes}
           onChangeText={setNotes}
           multiline
@@ -68,47 +63,18 @@ export default function NewCustomerScreen() {
           style={styles.textArea}
         />
 
-        <Button
-          title="حفظ الزبون"
-          onPress={handleSubmit}
-          loading={loading}
-          style={styles.saveBtn}
-        />
+        <Button title="حفظ الزبون" onPress={handleSubmit} loading={loading} style={styles.saveBtn} />
       </Card>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  content: {
-    padding: 16,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    marginBottom: 16,
-    textAlign: 'right',
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  saveBtn: {
-    marginTop: 16,
-    backgroundColor: '#0F172A',
-  },
-  errorBanner: {
-    backgroundColor: '#FEE2E2',
-    color: '#991B1B',
-    padding: 10,
-    borderRadius: 8,
-    fontSize: 13,
-    marginBottom: 12,
-    textAlign: 'right',
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  content: { padding: 16 },
+  title: { color: '#0F172A', fontSize: 20, fontWeight: 'bold', textAlign: 'right', marginBottom: 4 },
+  subtitle: { color: '#64748B', textAlign: 'right', marginBottom: 14, lineHeight: 20 },
+  textArea: { height: 88, textAlignVertical: 'top' },
+  saveBtn: { marginTop: 16, backgroundColor: '#0F172A' },
+  errorBanner: { backgroundColor: '#FEE2E2', color: '#991B1B', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 12, textAlign: 'right' },
 });

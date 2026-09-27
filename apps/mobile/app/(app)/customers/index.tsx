@@ -21,67 +21,52 @@ export default function CustomersScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Top Controls */}
       <View style={styles.topBar}>
         <Input
-          placeholder="ابحث باسم الزبون أو الهاتف..."
+          placeholder="ابحث باسم الزبون أو رقم الهاتف"
           value={search}
           onChangeText={setSearch}
           style={styles.searchInput}
         />
-        <Button
-          title="➕ إضافة زبون جديد"
-          onPress={() => router.push('/(app)/customers/new')}
-          style={styles.addBtn}
-        />
+        <Button title="إضافة زبون" onPress={() => router.push('/(app)/customers/new')} style={styles.addBtn} />
       </View>
 
-      {/* Customers List */}
       <FlatList
         data={customers}
         keyExtractor={(item) => String(item.id)}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          !isLoading ? <Text style={styles.emptyText}>لا يوجد زبائن مطابقون للبحث</Text> : null
-        }
+        ListEmptyComponent={!isLoading ? <Text style={styles.emptyText}>لا يوجد زبائن مطابقون</Text> : null}
         renderItem={({ item }) => (
           <Card style={styles.customerCard}>
-            <View style={styles.cardHeader}>
-              <TouchableOpacity onPress={() => router.push(`/(app)/customers/${item.id}`)}>
-                <Text style={styles.customerName}>{item.name}</Text>
-                {item.phone ? <Text style={styles.phoneText}>📞 {item.phone}</Text> : null}
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.cardFooter}>
-              <View>
-                <Text style={styles.balanceLabel}>إجمالي الديون والذمم:</Text>
-                <Text style={item.totalRemaining > 0 ? styles.balanceValueDanger : styles.balanceValueClean}>
+            <TouchableOpacity style={styles.customerMain} onPress={() => router.push(`/(app)/customers/${item.id}`)}>
+              <View style={styles.balanceBlock}>
+                <Text style={styles.balanceLabel}>الذمة</Text>
+                <Text style={item.totalRemaining > 0 ? styles.balanceDanger : styles.balanceClean}>
                   {formatMoney(item.totalRemaining)}
                 </Text>
               </View>
-
-              <View style={styles.actionButtonsRow}>
-                <TouchableOpacity
-                  style={styles.ledgerBtn}
-                  onPress={() => router.push(`/(app)/customers/${item.id}`)}
-                >
-                  <Text style={styles.ledgerBtnText}>📋 كشف الفواتير</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.newInvoiceBtn}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/(app)/invoices/new',
-                      params: { customerId: item.id, customerName: item.name },
-                    })
-                  }
-                >
-                  <Text style={styles.newInvoiceBtnText}>➕ طلبية</Text>
-                </TouchableOpacity>
+              <View style={styles.customerInfo}>
+                <Text style={styles.customerName}>{item.name}</Text>
+                {item.phone ? <Text style={styles.phoneText}>{item.phone}</Text> : <Text style={styles.phoneText}>بدون رقم هاتف</Text>}
               </View>
+            </TouchableOpacity>
+
+            <View style={styles.actionsRow}>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push(`/(app)/customers/${item.id}`)}>
+                <Text style={styles.secondaryBtnText}>سجل الزبون</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(app)/invoices/new',
+                    params: { customerId: item.id, customerName: item.name },
+                  })
+                }
+              >
+                <Text style={styles.primaryBtnText}>طلبية جديدة</Text>
+              </TouchableOpacity>
             </View>
           </Card>
         )}
@@ -91,95 +76,24 @@ export default function CustomersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  topBar: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  searchInput: {
-    marginBottom: 8,
-  },
-  addBtn: {
-    height: 44,
-  },
-  listContent: {
-    padding: 16,
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#94A3B8',
-    marginTop: 40,
-    fontSize: 15,
-  },
-  customerCard: {
-    marginBottom: 10,
-  },
-  cardHeader: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    paddingBottom: 8,
-    marginBottom: 8,
-  },
-  customerName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    textAlign: 'right',
-  },
-  phoneText: {
-    fontSize: 13,
-    color: '#64748B',
-    textAlign: 'right',
-    marginTop: 2,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  balanceLabel: {
-    fontSize: 11,
-    color: '#64748B',
-  },
-  balanceValueDanger: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#DC2626',
-  },
-  balanceValueClean: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#16A34A',
-  },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  ledgerBtn: {
-    backgroundColor: '#0284C7',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  ledgerBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  newInvoiceBtn: {
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  newInvoiceBtnText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  topBar: { padding: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  searchInput: { marginBottom: 8 },
+  addBtn: { height: 44, backgroundColor: '#0284C7' },
+  listContent: { padding: 16 },
+  emptyText: { color: '#94A3B8', textAlign: 'center', marginTop: 40 },
+  customerCard: { marginBottom: 10 },
+  customerMain: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  customerInfo: { flex: 1, alignItems: 'flex-end' },
+  customerName: { color: '#0F172A', fontWeight: 'bold', fontSize: 18, textAlign: 'right' },
+  phoneText: { color: '#64748B', fontSize: 13, marginTop: 3, textAlign: 'right' },
+  balanceBlock: { minWidth: 110, alignItems: 'flex-start' },
+  balanceLabel: { color: '#64748B', fontSize: 12 },
+  balanceDanger: { color: '#DC2626', fontWeight: 'bold', fontSize: 15, marginTop: 3 },
+  balanceClean: { color: '#16A34A', fontWeight: 'bold', fontSize: 15, marginTop: 3 },
+  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  primaryBtn: { flex: 1, backgroundColor: '#0F172A', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  primaryBtnText: { color: '#FFFFFF', fontWeight: 'bold' },
+  secondaryBtn: { flex: 1, backgroundColor: '#F1F5F9', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  secondaryBtnText: { color: '#0F172A', fontWeight: 'bold' },
 });

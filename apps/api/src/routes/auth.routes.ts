@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { getDbClient } from '../db/client';
+import { getDbClient, shouldUseLocalFallback } from '../db/client';
 import { UnauthorizedError } from '../errors/custom.errors';
 import { authMiddleware } from '../middleware/auth.middleware';
 import type { Env, Variables } from '../types/env.types';
@@ -19,39 +19,38 @@ authRoutes.post('/login', async (c) => {
   const body = await c.req.json();
   const { username, password } = loginSchema.parse(body);
 
-  let merchantRow = { id: 1, username: 'merchant', password_hash: '$2a$10$xTeRFuwNaA5UBoU69MrO1uOEYX8vSxAa4kkvsFx2wexvg2aoYIW1G' };
+  let merchantRow: { id: number; username: string; password_hash: string } | null = null;
   let authenticated = false;
+  const useLocalFallback = shouldUseLocalFallback(c.env);
 
-  try {
-    const db = getDbClient(c.env);
-    const result = await db.execute({
-      sql: 'SELECT * FROM merchant WHERE username = ?',
-      args: [username],
-    });
+  if (!useLocalFallback) {
+    try {
+      const db = getDbClient(c.env);
+      const result = await db.execute({
+        sql: 'SELECT * FROM merchant WHERE username = ?',
+        args: [username],
+      });
 
-    if (result.rows.length > 0) {
-      merchantRow = {
-        id: Number(result.rows[0]!.id),
-        username: String(result.rows[0]!.username),
-        password_hash: String(result.rows[0]!.password_hash),
-      };
-      authenticated = await bcrypt.compare(password, merchantRow.password_hash);
-    }
-  } catch (_dbError) {
-    console.warn('[DB Dev Fallback]: Using local fallback credentials');
-    // Fallback for local dev when Turso cloud DB is not configured
-    if (username === 'merchant' && password === 'password123') {
-      authenticated = true;
+      if (result.rows.length > 0) {
+        merchantRow = {
+          id: Number(result.rows[0]!.id),
+          username: String(result.rows[0]!.username),
+          password_hash: String(result.rows[0]!.password_hash),
+        };
+        authenticated = await bcrypt.compare(password, merchantRow.password_hash);
+      }
+    } catch {
+      throw new UnauthorizedError('تعذر الاتصال بقاعدة البيانات، حاول لاحقاً');
     }
   }
 
-  if (!authenticated) {
-    // Also allow merchant / password123 as ultimate dev override
-    if (username === 'merchant' && password === 'password123') {
-      authenticated = true;
-    } else {
-      throw new UnauthorizedError('اسم المستخدم أو كلمة المرور غير صحيحة');
-    }
+  if (!authenticated && useLocalFallback && username === 'merchant' && password === 'password123') {
+    authenticated = true;
+    merchantRow = { id: 1, username: 'merchant', password_hash: '' };
+  }
+
+  if (!authenticated || !merchantRow) {
+    throw new UnauthorizedError('اسم المستخدم أو كلمة المرور غير صحيحة');
   }
 
   const secret = new TextEncoder().encode(c.env.JWT_SECRET || 'super-secret-key-for-development-at-least-32-chars');

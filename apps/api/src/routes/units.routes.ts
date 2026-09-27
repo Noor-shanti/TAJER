@@ -7,7 +7,7 @@ import { createUnitSchema } from '../validators/schemas';
 const unitsRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 unitsRoutes.use('*', authMiddleware);
 
-let fallbackUnits = [
+const fallbackUnits = [
   { id: 1, nameAr: 'كروز', nameEn: 'Carton', symbol: 'CARTON', createdAt: new Date().toISOString() },
   { id: 2, nameAr: 'حبة', nameEn: 'Piece', symbol: 'PIECE', createdAt: new Date().toISOString() },
   { id: 3, nameAr: 'علبة', nameEn: 'Box', symbol: 'BOX', createdAt: new Date().toISOString() },
@@ -27,7 +27,7 @@ unitsRoutes.get('/', async (c) => {
       createdAt: String(row.created_at),
     }));
     return c.json({ success: true, data: units });
-  } catch (_err) {
+  } catch {
     return c.json({ success: true, data: fallbackUnits });
   }
 });
@@ -45,7 +45,7 @@ unitsRoutes.post('/', async (c) => {
     });
     const row = result.rows[0]!;
     return c.json({ success: true, data: { id: Number(row.id), nameAr: data.nameAr, nameEn: data.nameEn, symbol: data.symbol, createdAt: String(row.created_at) } }, 201);
-  } catch (_err) {
+  } catch {
     const newUnit = { id: fallbackUnits.length + 1, nameAr: data.nameAr, nameEn: data.nameEn, symbol: data.symbol, createdAt: new Date().toISOString() };
     fallbackUnits.push(newUnit);
     return c.json({ success: true, data: newUnit }, 201);

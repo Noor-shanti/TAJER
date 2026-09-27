@@ -1,23 +1,22 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { I18nManager, SafeAreaView, StyleSheet, StatusBar } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
 
-// Force Right-to-Left (RTL) Layout for Arabic UI
 try {
   if (!I18nManager.isRTL) {
     I18nManager.allowRTL(true);
     I18nManager.forceRTL(true);
   }
-} catch (e) {
-  console.error('Error enabling RTL:', e);
+} catch (error) {
+  console.error('Error enabling RTL:', error);
 }
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 2,
-      staleTime: 1000 * 60 * 5, // 5 minutes cache
+      staleTime: 1000 * 60 * 5,
     },
   },
 });

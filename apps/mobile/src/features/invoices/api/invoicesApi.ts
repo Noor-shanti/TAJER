@@ -35,6 +35,10 @@ export const invoicesApi = {
     });
   },
 
+  async getInvoicesByCustomer(customerId: number): Promise<ApiSuccessResponse<InvoiceListItem[]>> {
+    return await apiClient<ApiSuccessResponse<InvoiceListItem[]>>(`/invoices/customer/${customerId}`);
+  },
+
   async getInvoiceById(id: number): Promise<ApiSuccessResponse<Invoice>> {
     return await apiClient<ApiSuccessResponse<Invoice>>(`/invoices/${id}`);
   },
@@ -52,6 +56,13 @@ export const invoicesApi = {
       method: 'POST',
       body: JSON.stringify(payload),
       idempotencyKey: payload.idempotencyKey,
+    });
+  },
+
+  async updateOrderStatus(invoiceId: number, orderStatus: 'CONFIRMED' | 'COMPLETED' | 'CANCELLED'): Promise<ApiSuccessResponse<{ id: number; orderStatus: string }>> {
+    return await apiClient<ApiSuccessResponse<{ id: number; orderStatus: string }>>(`/invoices/${invoiceId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ orderStatus }),
     });
   },
 };

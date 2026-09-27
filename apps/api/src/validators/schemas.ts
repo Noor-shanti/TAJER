@@ -32,7 +32,7 @@ export const createProductSchema = z.object({
   name: z.string().trim().min(1, 'اسم المنتج مطلوب'),
   categoryId: z.number().int().positive().optional().nullable(),
   unitId: z.number().int().positive('وحدة القياس مطلوبة'),
-  currentPrice: z.number().int().nonnegative('السعر يجب أن يكون صفر أو أكثر'), // In minor units (agorot)
+  currentPrice: z.number().int().nonnegative('السعر يجب أن يكون صفرا أو أكثر'), // In minor units (agorot)
 });
 
 export const updateProductSchema = createProductSchema.partial().extend({
@@ -45,7 +45,7 @@ export const createInvoiceItemSchema = z.object({
   productNameSnapshot: z.string().trim().min(1, 'اسم المنتج مطلوب'),
   unitNameSnapshot: z.string().trim().min(1, 'وحدة المنتج مطلوبة'),
   quantity: z.number().int().positive('الكمية يجب أن تكون أكبر من صفر'), // Scale 1000
-  unitPrice: z.number().int().nonnegative('سعر الوحدة يجب أن يكون صفر أو أكثر'), // Minor units
+  unitPrice: z.number().int().nonnegative('سعر الوحدة يجب أن يكون صفرا أو أكثر'), // Minor units
   discountType: z.enum(['NONE', 'FIXED', 'PERCENTAGE']).default('NONE'),
   discountValue: z.number().int().nonnegative().default(0),
 });

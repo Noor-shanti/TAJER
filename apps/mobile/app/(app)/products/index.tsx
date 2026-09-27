@@ -18,41 +18,39 @@ export default function ProductsScreen() {
     queryFn: () => productsApi.getProducts(search, 1),
   });
 
-  const products = (data?.data || []).filter((p) => {
-    if (selectedCategory === 'ALL') return true;
-    return p.categoryName === selectedCategory;
-  });
+  const allProducts = data?.data || [];
+  const categories = Array.from(
+    new Set(allProducts.map((product) => product.categoryName).filter((name): name is string => Boolean(name)))
+  );
+  const products = allProducts.filter(
+    (product) => selectedCategory === 'ALL' || product.categoryName === selectedCategory
+  );
 
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
         <Input
-          placeholder="ابحث باسم المنتج أو الاصناف..."
+          placeholder="ابحث باسم المنتج أو التصنيف"
           value={search}
           onChangeText={setSearch}
           style={styles.searchInput}
         />
 
-        {/* Category Filters */}
         <View style={styles.categoryChipsRow}>
-          {['ALL', 'سجائر ومشروبات', 'مواد غذائية', 'عام'].map((cat) => (
+          {['ALL', ...categories].map((category) => (
             <TouchableOpacity
-              key={cat}
-              style={[styles.catChip, selectedCategory === cat && styles.catChipActive]}
-              onPress={() => setSelectedCategory(cat)}
+              key={category}
+              style={[styles.catChip, selectedCategory === category && styles.catChipActive]}
+              onPress={() => setSelectedCategory(category)}
             >
-              <Text style={[styles.catText, selectedCategory === cat && styles.catTextActive]}>
-                {cat === 'ALL' ? 'الكل' : cat}
+              <Text style={[styles.catText, selectedCategory === category && styles.catTextActive]}>
+                {category === 'ALL' ? 'الكل' : category}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <Button
-          title="➕ إضافة منتج جديد"
-          onPress={() => router.push('/(app)/products/new')}
-          style={styles.addBtn}
-        />
+        <Button title="إضافة منتج" onPress={() => router.push('/(app)/products/new')} style={styles.addBtn} />
       </View>
 
       <FlatList
@@ -60,21 +58,17 @@ export default function ProductsScreen() {
         keyExtractor={(item) => String(item.id)}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          !isLoading ? <Text style={styles.emptyText}>لا يوجد منتجات في هذا التصنيف</Text> : null
-        }
+        ListEmptyComponent={!isLoading ? <Text style={styles.emptyText}>لا يوجد منتجات مطابقة</Text> : null}
         renderItem={({ item }) => (
           <Card style={styles.productCard}>
             <View style={styles.cardHeader}>
-              <View>
-                <Text style={styles.productName}>{item.name}</Text>
-                {item.categoryName ? (
-                  <Text style={styles.categoryBadge}>🏷️ {item.categoryName}</Text>
-                ) : null}
-              </View>
               <View style={styles.priceContainer}>
                 <Text style={styles.priceText}>{formatMoney(item.currentPrice)}</Text>
                 <Text style={styles.unitText}>/ {item.unitNameAr}</Text>
+              </View>
+              <View style={styles.productInfo}>
+                <Text style={styles.productName}>{item.name}</Text>
+                <Text style={styles.categoryBadge}>{item.categoryName || 'بدون تصنيف'}</Text>
               </View>
             </View>
           </Card>
@@ -98,9 +92,10 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 40, fontSize: 15 },
   productCard: { marginBottom: 10 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  productInfo: { flex: 1, alignItems: 'flex-end' },
   productName: { fontSize: 16, fontWeight: 'bold', color: '#0F172A', textAlign: 'right' },
   categoryBadge: { fontSize: 12, color: '#64748B', marginTop: 2, textAlign: 'right' },
-  priceContainer: { alignItems: 'flex-end' },
+  priceContainer: { alignItems: 'flex-start', paddingRight: 12 },
   priceText: { fontSize: 16, fontWeight: 'bold', color: '#0F172A' },
   unitText: { fontSize: 11, color: '#64748B' },
 });

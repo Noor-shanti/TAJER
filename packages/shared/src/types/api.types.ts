@@ -132,6 +132,7 @@ export interface Invoice {
   orderStatus: OrderStatus;
   notes: string | null;
   items: InvoiceItem[];
+  payments: Payment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -139,6 +140,7 @@ export interface Invoice {
 export interface InvoiceListItem {
   id: number;
   invoiceNumber: string;
+  customerId: number;
   customerName: string;
   total: number;
   amountPaid: number;
