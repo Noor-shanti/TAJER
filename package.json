@@ -10,6 +10,8 @@
   "scripts": {
     "api": "npm run dev --workspace=apps/api",
     "mobile": "npm run start --workspace=apps/mobile",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -20,7 +22,8 @@
     "@typescript-eslint/parser": "^8.0.0",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.1"
   },
   "engines": {
     "node": ">=20.0.0",

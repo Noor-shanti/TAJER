@@ -20,6 +20,14 @@ export {
   INVOICE_NUMBER_PREFIX,
 } from './constants/index';
 
+// Calculations
+export {
+  calculateLineSubtotal,
+  calculateDiscountAmount,
+  derivePaymentStatus,
+  validatePaymentAmount,
+} from './utils/calculations';
+
 // Types
 export type {
   PaginationMeta,
