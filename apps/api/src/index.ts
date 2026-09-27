@@ -3,6 +3,11 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { errorHandler } from './middleware/error.middleware';
 import authRoutes from './routes/auth.routes';
+import categoriesRoutes from './routes/categories.routes';
+import customersRoutes from './routes/customers.routes';
+import invoicesRoutes from './routes/invoices.routes';
+import productsRoutes from './routes/products.routes';
+import unitsRoutes from './routes/units.routes';
 import type { Env, Variables } from './types/env.types';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -32,5 +37,10 @@ app.get('/api/v1/health', (c) => {
 
 // Route Mounting
 app.route('/api/v1/auth', authRoutes);
+app.route('/api/v1/customers', customersRoutes);
+app.route('/api/v1/categories', categoriesRoutes);
+app.route('/api/v1/units', unitsRoutes);
+app.route('/api/v1/products', productsRoutes);
+app.route('/api/v1/invoices', invoicesRoutes);
 
 export default app;
