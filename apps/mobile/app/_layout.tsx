@@ -25,14 +25,14 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+        <StatusBar barStyle="light-content" backgroundColor="#075FD8" />
         <Stack
           screenOptions={{
-            headerStyle: { backgroundColor: '#0F172A' },
+            headerStyle: { backgroundColor: '#075FD8' },
             headerTintColor: '#FFFFFF',
             headerTitleStyle: { fontWeight: 'bold' },
             headerTitleAlign: 'center',
-            contentStyle: { backgroundColor: '#F8FAFC' },
+            contentStyle: { backgroundColor: '#F4F7FB' },
           }}
         >
           <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -47,6 +47,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F4F7FB',
   },
 });

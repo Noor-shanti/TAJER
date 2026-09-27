@@ -35,6 +35,8 @@ export default function NewCustomerScreen() {
         notes: notes.trim() || undefined,
       });
       queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['customersSelect'] });
+      queryClient.invalidateQueries({ queryKey: ['customerDebtSummary'] });
       router.replace(`/(app)/customers/${res.data.id}`);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'تعذر حفظ الزبون'));
@@ -70,11 +72,11 @@ export default function NewCustomerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#F4F7FB' },
   content: { padding: 16 },
-  title: { color: '#0F172A', fontSize: 20, fontWeight: 'bold', textAlign: 'right', marginBottom: 4 },
+  title: { color: '#0B1220', fontSize: 20, fontWeight: 'bold', textAlign: 'right', marginBottom: 4 },
   subtitle: { color: '#64748B', textAlign: 'right', marginBottom: 14, lineHeight: 20 },
   textArea: { height: 88, textAlignVertical: 'top' },
-  saveBtn: { marginTop: 16, backgroundColor: '#0F172A' },
+  saveBtn: { marginTop: 16, backgroundColor: '#0B1220' },
   errorBanner: { backgroundColor: '#FEE2E2', color: '#991B1B', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 12, textAlign: 'right' },
 });

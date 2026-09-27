@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import type { Invoice } from '@merchant/shared';
 import { Badge } from '../../../src/components/common/Badge';
 import { Button } from '../../../src/components/common/Button';
 import { Card } from '../../../src/components/common/Card';
@@ -15,6 +18,95 @@ type OrderStatus = 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
 
 function getErrorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
+}
+
+function paymentLabel(status: string) {
+  if (status === 'PAID') return 'مدفوعة';
+  if (status === 'PARTIALLY_PAID') return 'دفع جزئي';
+  return 'غير مدفوعة';
+}
+
+function orderLabel(status: string) {
+  if (status === 'COMPLETED') return 'تم التسليم';
+  if (status === 'CANCELLED') return 'ملغاة';
+  return 'قيد التجهيز';
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[char] || char);
+}
+
+function invoiceHtml(invoice: Invoice) {
+  const itemsSubtotal = invoice.items.reduce((sum, item) => sum + item.lineSubtotal, 0);
+  const itemDiscount = Math.max(0, itemsSubtotal - invoice.subtotal);
+  const invoiceDiscount = Math.max(0, invoice.subtotal - invoice.total);
+  const rows = invoice.items.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.productNameSnapshot)}</td>
+      <td>${formatQuantity(item.quantity)} ${escapeHtml(item.unitNameSnapshot)}</td>
+      <td>${formatMoney(item.unitPrice)}</td>
+      <td>${formatMoney(item.lineTotal)}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <html dir="rtl">
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif; direction: rtl; padding: 24px; color: #111827; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #075FD8; padding-bottom: 12px; margin-bottom: 18px; }
+          h1 { margin: 0 0 6px; color: #075FD8; font-size: 26px; }
+          .muted { color: #64748B; font-size: 13px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border-bottom: 1px solid #E5E7EB; padding: 10px 8px; text-align: right; font-size: 13px; }
+          th { background: #F1F5F9; color: #334155; }
+          .summary { margin-top: 18px; width: 100%; }
+          .line { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #EEF2F7; }
+          .total { font-size: 18px; font-weight: 800; color: #075FD8; }
+          .remaining { color: #DC2626; font-weight: 800; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1>فاتورة بيع</h1>
+            <div class="muted">دفتر التاجر</div>
+          </div>
+          <div>
+            <strong>${escapeHtml(invoice.invoiceNumber)}</strong><br />
+            <span class="muted">${new Date(invoice.createdAt).toLocaleDateString('ar')}</span>
+          </div>
+        </div>
+        <div><strong>الزبون:</strong> ${escapeHtml(invoice.customerName)}</div>
+        <div><strong>حالة الدفع:</strong> ${paymentLabel(invoice.paymentStatus)}</div>
+        <div><strong>حالة الطلبية:</strong> ${orderLabel(invoice.orderStatus)}</div>
+
+        <table>
+          <thead>
+            <tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>الإجمالي</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+
+        <div class="summary">
+          <div class="line"><span>إجمالي الأصناف قبل الخصم</span><strong>${formatMoney(itemsSubtotal)}</strong></div>
+          ${itemDiscount > 0 ? `<div class="line"><span>خصم الأصناف</span><strong>${formatMoney(itemDiscount)}</strong></div>` : ''}
+          <div class="line"><span>إجمالي الأصناف بعد الخصم</span><strong>${formatMoney(invoice.subtotal)}</strong></div>
+          ${invoiceDiscount > 0 ? `<div class="line"><span>خصم الفاتورة</span><strong>${formatMoney(invoiceDiscount)}</strong></div>` : ''}
+          <div class="line"><span>إجمالي الفاتورة</span><strong class="total">${formatMoney(invoice.total)}</strong></div>
+          <div class="line"><span>المدفوع</span><strong>${formatMoney(invoice.amountPaid)}</strong></div>
+          <div class="line"><span>المتبقي</span><strong class="remaining">${formatMoney(invoice.remaining)}</strong></div>
+        </div>
+      </body>
+    </html>
+  `;
 }
 
 export default function InvoiceDetailScreen() {
@@ -41,7 +133,38 @@ export default function InvoiceDetailScreen() {
     queryClient.invalidateQueries({ queryKey: ['invoices'] });
     queryClient.invalidateQueries({ queryKey: ['invoicesList'] });
     queryClient.invalidateQueries({ queryKey: ['customers'] });
+    queryClient.invalidateQueries({ queryKey: ['customerDetail'] });
+    queryClient.invalidateQueries({ queryKey: ['customerDebtSummary'] });
     queryClient.invalidateQueries({ queryKey: ['customerInvoices'] });
+    queryClient.invalidateQueries({ queryKey: ['salesReport'] });
+  };
+
+  const handlePrint = async () => {
+    if (!invoice) return;
+    try {
+      await Print.printAsync({ html: invoiceHtml(invoice) });
+    } catch {
+      Alert.alert('تعذر فتح الطباعة', 'تأكد من وجود طابعة أو جرّب مشاركة ملف PDF.');
+    }
+  };
+
+  const handleShare = async () => {
+    if (!invoice) return;
+    try {
+      const available = await Sharing.isAvailableAsync();
+      if (!available) {
+        Alert.alert('المشاركة غير متاحة', 'هذا الجهاز لا يدعم مشاركة الملفات من هنا.');
+        return;
+      }
+      const file = await Print.printToFileAsync({ html: invoiceHtml(invoice) });
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `مشاركة الفاتورة ${invoice.invoiceNumber}`,
+        UTI: 'com.adobe.pdf',
+      });
+    } catch {
+      Alert.alert('تعذرت مشاركة الفاتورة', 'حاول مرة أخرى أو استخدم خيار الطباعة لحفظها كملف PDF.');
+    }
   };
 
   const handleAddPayment = async () => {
@@ -99,6 +222,8 @@ export default function InvoiceDetailScreen() {
     );
   }
 
+  const itemsSubtotal = invoice.items.reduce((sum, item) => sum + item.lineSubtotal, 0);
+  const itemDiscount = Math.max(0, itemsSubtotal - invoice.subtotal);
   const invoiceDiscount = Math.max(0, invoice.subtotal - invoice.total);
   const payments = invoice.payments || [];
 
@@ -108,16 +233,10 @@ export default function InvoiceDetailScreen() {
 
       <Card style={styles.headerCard}>
         <View style={styles.headerTop}>
-          <View style={styles.badgesCol}>
-            <Badge
-              label={invoice.paymentStatus === 'PAID' ? 'مدفوعة' : invoice.paymentStatus === 'PARTIALLY_PAID' ? 'دفع جزئي' : 'غير مدفوعة'}
-              variant={invoice.paymentStatus === 'PAID' ? 'success' : invoice.paymentStatus === 'PARTIALLY_PAID' ? 'warning' : 'danger'}
-            />
-            <Badge
-              label={invoice.orderStatus === 'CONFIRMED' ? 'مؤكدة' : invoice.orderStatus === 'COMPLETED' ? 'مكتملة' : 'ملغاة'}
-              variant={invoice.orderStatus === 'CANCELLED' ? 'danger' : 'info'}
-            />
-          </View>
+          <Badge
+            label={paymentLabel(invoice.paymentStatus)}
+            variant={invoice.paymentStatus === 'PAID' ? 'success' : invoice.paymentStatus === 'PARTIALLY_PAID' ? 'warning' : 'danger'}
+          />
           <View style={styles.titleBlock}>
             <Text style={styles.invoiceNumber}>{invoice.invoiceNumber}</Text>
             <TouchableOpacity onPress={() => router.push(`/(app)/customers/${invoice.customerId}`)}>
@@ -126,11 +245,24 @@ export default function InvoiceDetailScreen() {
             <Text style={styles.dateText}>{new Date(invoice.createdAt).toLocaleDateString('ar')}</Text>
           </View>
         </View>
+        <View style={styles.actionRow}>
+          <Button title="مشاركة PDF" onPress={handleShare} variant="secondary" style={styles.actionBtn} />
+          <Button title="طباعة" onPress={handlePrint} style={styles.actionBtn} />
+        </View>
+      </Card>
 
+      <Card style={styles.section}>
+        <View style={styles.statusHeader}>
+          <Badge label={orderLabel(invoice.orderStatus)} variant={invoice.orderStatus === 'CANCELLED' ? 'danger' : 'info'} />
+          <View style={styles.statusTitleBlock}>
+            <Text style={styles.sectionTitleNoMargin}>حالة الطلبية</Text>
+            <Text style={styles.statusHint}>للمتابعة فقط، وحساب الذمم يعتمد على المتبقي والمدفوع.</Text>
+          </View>
+        </View>
         <View style={styles.statusActions}>
           {[
-            ['CONFIRMED', 'مؤكدة'],
-            ['COMPLETED', 'مكتملة'],
+            ['CONFIRMED', 'قيد التجهيز'],
+            ['COMPLETED', 'تم التسليم'],
             ['CANCELLED', 'ملغاة'],
           ].map(([value, label]) => (
             <TouchableOpacity
@@ -172,7 +304,17 @@ export default function InvoiceDetailScreen() {
       <Card style={styles.section}>
         <Text style={styles.sectionTitle}>الملخص المالي</Text>
         <View style={styles.calcRow}>
-          <Text style={styles.calcLabel}>مجموع الأصناف</Text>
+          <Text style={styles.calcLabel}>إجمالي الأصناف قبل الخصم</Text>
+          <Text style={styles.calcValue}>{formatMoney(itemsSubtotal)}</Text>
+        </View>
+        {itemDiscount > 0 ? (
+          <View style={styles.calcRow}>
+            <Text style={styles.calcLabel}>خصم الأصناف</Text>
+            <Text style={styles.discountValue}>-{formatMoney(itemDiscount)}</Text>
+          </View>
+        ) : null}
+        <View style={styles.calcRow}>
+          <Text style={styles.calcLabel}>إجمالي الأصناف بعد الخصم</Text>
           <Text style={styles.calcValue}>{formatMoney(invoice.subtotal)}</Text>
         </View>
         {invoiceDiscount > 0 ? (
@@ -182,7 +324,7 @@ export default function InvoiceDetailScreen() {
           </View>
         ) : null}
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>مجموع الفاتورة</Text>
+          <Text style={styles.totalLabel}>إجمالي الفاتورة</Text>
           <Text style={styles.totalValue}>{formatMoney(invoice.total)}</Text>
         </View>
         <View style={styles.calcRow}>
@@ -249,39 +391,44 @@ export default function InvoiceDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#F4F7FB' },
   content: { padding: 16 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: '#64748B' },
   headerCard: { marginBottom: 12 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   titleBlock: { flex: 1, alignItems: 'flex-end' },
-  invoiceNumber: { color: '#0F172A', fontWeight: 'bold', fontSize: 20 },
-  customerName: { color: '#0284C7', fontWeight: 'bold', marginTop: 4, textAlign: 'right' },
+  invoiceNumber: { color: '#0B1220', fontWeight: 'bold', fontSize: 20 },
+  customerName: { color: '#075FD8', fontWeight: 'bold', marginTop: 4, textAlign: 'right' },
   dateText: { color: '#64748B', fontSize: 12, marginTop: 4 },
-  badgesCol: { gap: 4, alignItems: 'flex-start' },
-  statusActions: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  statusBtn: { flex: 1, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#FFFFFF', alignItems: 'center' },
-  statusBtnActive: { backgroundColor: '#0284C7', borderColor: '#0284C7' },
-  statusBtnDanger: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
-  statusBtnText: { color: '#334155', fontWeight: 'bold' },
-  statusBtnTextActive: { color: '#FFFFFF' },
+  actionRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  actionBtn: { flex: 1, height: 44 },
   section: { marginBottom: 12 },
-  sectionTitle: { color: '#0F172A', fontSize: 16, fontWeight: 'bold', textAlign: 'right', marginBottom: 10 },
+  sectionTitle: { color: '#0B1220', fontSize: 16, fontWeight: 'bold', textAlign: 'right', marginBottom: 10 },
+  sectionTitleNoMargin: { color: '#0B1220', fontSize: 16, fontWeight: 'bold', textAlign: 'right' },
+  statusHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
+  statusTitleBlock: { flex: 1, alignItems: 'flex-end' },
+  statusHint: { color: '#7A8699', fontSize: 12, lineHeight: 18, textAlign: 'right', marginTop: 3 },
+  statusActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  statusBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: '#D8E2EF', backgroundColor: '#FFFFFF', alignItems: 'center' },
+  statusBtnActive: { backgroundColor: '#075FD8', borderColor: '#075FD8' },
+  statusBtnDanger: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
+  statusBtnText: { color: '#44546A', fontWeight: 'bold', fontSize: 12 },
+  statusBtnTextActive: { color: '#FFFFFF' },
   itemRow: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingVertical: 10, gap: 10 },
   itemInfo: { flex: 1, alignItems: 'flex-end' },
-  itemName: { color: '#0F172A', fontWeight: 'bold', textAlign: 'right' },
+  itemName: { color: '#0B1220', fontWeight: 'bold', textAlign: 'right' },
   itemSub: { color: '#64748B', fontSize: 12, marginTop: 3, textAlign: 'right' },
   itemAmount: { minWidth: 110 },
-  itemTotal: { color: '#0F172A', fontWeight: 'bold' },
+  itemTotal: { color: '#0B1220', fontWeight: 'bold' },
   discountText: { color: '#B45309', fontSize: 12, marginTop: 3 },
   calcRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7 },
   calcLabel: { color: '#475569', fontWeight: '600' },
-  calcValue: { color: '#0F172A', fontWeight: 'bold' },
+  calcValue: { color: '#0B1220', fontWeight: 'bold' },
   discountValue: { color: '#DC2626', fontWeight: 'bold' },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E2E8F0', paddingVertical: 10, marginVertical: 6 },
-  totalLabel: { color: '#0F172A', fontWeight: 'bold', fontSize: 16 },
-  totalValue: { color: '#0284C7', fontWeight: 'bold', fontSize: 18 },
+  totalLabel: { color: '#0B1220', fontWeight: 'bold', fontSize: 16 },
+  totalValue: { color: '#075FD8', fontWeight: 'bold', fontSize: 18 },
   paidValue: { color: '#16A34A', fontWeight: 'bold' },
   remainingRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#FEF2F2', borderRadius: 8, padding: 10, marginTop: 6 },
   remainingLabel: { color: '#991B1B', fontWeight: 'bold' },
@@ -293,10 +440,10 @@ const styles = StyleSheet.create({
   paymentAmount: { color: '#16A34A', fontWeight: 'bold' },
   paymentDate: { color: '#64748B', fontSize: 12, marginTop: 3 },
   paymentInfo: { flex: 1, alignItems: 'flex-end' },
-  paymentMethod: { color: '#0F172A', fontWeight: 'bold' },
+  paymentMethod: { color: '#0B1220', fontWeight: 'bold' },
   paymentNotes: { color: '#64748B', fontSize: 12, marginTop: 3, textAlign: 'right' },
   modalContainer: { flex: 1, backgroundColor: '#FFFFFF', padding: 20, paddingTop: 48 },
-  modalTitle: { color: '#0F172A', fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
+  modalTitle: { color: '#0B1220', fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
   modalSub: { color: '#64748B', textAlign: 'center', marginBottom: 18 },
   modalPayBtn: { backgroundColor: '#16A34A', marginTop: 14 },
   errorBanner: { backgroundColor: '#FEE2E2', color: '#991B1B', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 12, textAlign: 'right' },

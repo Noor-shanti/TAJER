@@ -17,9 +17,8 @@ type CategoryResponse = {
 };
 
 const fallbackCategories: CategoryResponse[] = [
-  { id: 1, name: 'سجائر ومشروبات', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 1, name: 'سجائر', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   { id: 2, name: 'مواد غذائية', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 3, name: 'عام', isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 ];
 
 function isNoDbConfigured(env: Env) {
@@ -37,13 +36,15 @@ categoriesRoutes.get('/', async (c) => {
       : 'SELECT * FROM categories WHERE is_active = 1 ORDER BY name ASC';
 
     const result = await db.execute(sql);
-    const categories = result.rows.map((row) => ({
-      id: Number(row.id),
-      name: String(row.name),
-      isActive: Boolean(row.is_active),
-      createdAt: String(row.created_at),
-      updatedAt: String(row.updated_at),
-    }));
+    const categories = result.rows
+      .map((row) => ({
+        id: Number(row.id),
+        name: String(row.name) === 'سجائر ومشروبات' ? 'سجائر' : String(row.name),
+        isActive: Boolean(row.is_active),
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at),
+      }))
+      .filter((category) => category.name !== 'عام');
 
     return c.json({ success: true, data: categories });
   } catch (err) {

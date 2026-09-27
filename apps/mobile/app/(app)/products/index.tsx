@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Button } from '../../../src/components/common/Button';
@@ -7,6 +8,8 @@ import { Card } from '../../../src/components/common/Card';
 import { Input } from '../../../src/components/common/Input';
 import { productsApi } from '../../../src/features/products/api/productsApi';
 import { formatMoney } from '../../../src/utils/money';
+
+const BLUE = '#075FD8';
 
 export default function ProductsScreen() {
   const router = useRouter();
@@ -60,18 +63,23 @@ export default function ProductsScreen() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={!isLoading ? <Text style={styles.emptyText}>لا يوجد منتجات مطابقة</Text> : null}
         renderItem={({ item }) => (
-          <Card style={styles.productCard}>
+          <TouchableOpacity onPress={() => router.push(`/(app)/products/${item.id}`)}><Card style={styles.productCard}>
             <View style={styles.cardHeader}>
               <View style={styles.priceContainer}>
                 <Text style={styles.priceText}>{formatMoney(item.currentPrice)}</Text>
                 <Text style={styles.unitText}>/ {item.unitNameAr}</Text>
               </View>
               <View style={styles.productInfo}>
-                <Text style={styles.productName}>{item.name}</Text>
-                <Text style={styles.categoryBadge}>{item.categoryName || 'بدون تصنيف'}</Text>
+                <View style={styles.iconWrap}>
+                  <Ionicons name="cube-outline" size={18} color={BLUE} />
+                </View>
+                <View style={styles.productTexts}>
+                  <Text style={styles.productName}>{item.name}</Text>
+                  <Text style={styles.categoryBadge}>{item.categoryName || 'بدون تصنيف'}</Text>
+                </View>
               </View>
             </View>
-          </Card>
+          </Card></TouchableOpacity>
         )}
       />
     </View>
@@ -79,23 +87,25 @@ export default function ProductsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  topBar: { padding: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  container: { flex: 1, backgroundColor: '#F4F7FB' },
+  topBar: { padding: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E6EDF7' },
   searchInput: { marginBottom: 8 },
   categoryChipsRow: { flexDirection: 'row', gap: 6, marginBottom: 10, flexWrap: 'wrap' },
-  catChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' },
-  catChipActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
-  catText: { fontSize: 12, color: '#334155', fontWeight: '500' },
-  catTextActive: { color: '#FFFFFF', fontWeight: 'bold' },
-  addBtn: { height: 44, backgroundColor: '#0284C7' },
+  catChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 12, backgroundColor: '#EEF3FA', borderWidth: 1, borderColor: '#E2EAF5' },
+  catChipActive: { backgroundColor: BLUE, borderColor: BLUE },
+  catText: { fontSize: 12, color: '#44546A', fontWeight: '700' },
+  catTextActive: { color: '#FFFFFF', fontWeight: '900' },
+  addBtn: { height: 44, backgroundColor: BLUE },
   listContent: { padding: 16 },
-  emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 40, fontSize: 15 },
+  emptyText: { textAlign: 'center', color: '#9AA6B8', marginTop: 40, fontSize: 15 },
   productCard: { marginBottom: 10 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  productInfo: { flex: 1, alignItems: 'flex-end' },
-  productName: { fontSize: 16, fontWeight: 'bold', color: '#0F172A', textAlign: 'right' },
-  categoryBadge: { fontSize: 12, color: '#64748B', marginTop: 2, textAlign: 'right' },
+  productInfo: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  productTexts: { flex: 1, alignItems: 'flex-end' },
+  iconWrap: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#EAF2FF', alignItems: 'center', justifyContent: 'center' },
+  productName: { fontSize: 16, fontWeight: '900', color: '#0B1220', textAlign: 'right' },
+  categoryBadge: { fontSize: 12, color: '#7A8699', marginTop: 2, textAlign: 'right' },
   priceContainer: { alignItems: 'flex-start', paddingRight: 12 },
-  priceText: { fontSize: 16, fontWeight: 'bold', color: '#0F172A' },
-  unitText: { fontSize: 11, color: '#64748B' },
+  priceText: { fontSize: 16, fontWeight: '900', color: '#0B1220' },
+  unitText: { fontSize: 11, color: '#7A8699' },
 });

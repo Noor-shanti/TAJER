@@ -50,6 +50,12 @@ export interface CustomerSummary {
   totalRemaining: number;
 }
 
+export interface CustomerDebtSummary {
+  totalRemaining: number;
+  activeCustomers: number;
+  openInvoices: number;
+}
+
 // ─── Category ──────────────────────────────────────────────────────────────
 
 export interface Category {
@@ -147,6 +153,32 @@ export interface InvoiceListItem {
   remaining: number;
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
+  createdAt: string;
+}
+
+export interface SalesReportItem {
+  productName: string;
+  unitName: string;
+  quantity: number;
+  total: number;
+}
+
+export interface SalesReport {
+  from: string;
+  to: string;
+  invoiceCount: number;
+  totalSales: number;
+  totalPaid: number;
+  totalRemaining: number;
+  items: SalesReportItem[];
+}
+
+export interface AuditLog {
+  id: number;
+  entityType: 'CUSTOMER' | 'PRODUCT' | 'INVOICE';
+  entityId: number;
+  action: string;
+  description: string;
   createdAt: string;
 }
 

@@ -19,20 +19,20 @@ export const Button: React.FC<ButtonProps> = ({
     if (disabled) return '#CBD5E1';
     switch (variant) {
       case 'secondary':
-        return '#0284C7';
+        return '#EAF2FF';
       case 'danger':
         return '#DC2626';
       case 'outline':
         return 'transparent';
       case 'primary':
       default:
-        return '#0F172A';
+        return '#075FD8';
     }
   };
 
   const getTextColor = () => {
     if (disabled) return '#94A3B8';
-    if (variant === 'outline') return '#0F172A';
+    if (variant === 'outline' || variant === 'secondary') return '#075FD8';
     return '#FFFFFF';
   };
 
@@ -60,7 +60,7 @@ export const Button: React.FC<ButtonProps> = ({
 const styles = StyleSheet.create({
   button: {
     height: 50,
-    borderRadius: 12,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   },
   outlineBorder: {
     borderWidth: 1.5,
-    borderColor: '#0F172A',
+    borderColor: '#075FD8',
   },
   text: {
     fontSize: 16,

@@ -26,7 +26,7 @@ function moneyInputValue(value: number) {
 export default function NewInvoiceScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams<{ customerId?: string; customerName?: string }>();
+  const params = useLocalSearchParams<{ customerId?: string; customerName?: string; draftId?: string }>();
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(
     params.customerId ? Number(params.customerId) : null
@@ -45,8 +45,20 @@ export default function NewInvoiceScreen() {
   const [idempotencyKey, setIdempotencyKey] = useState('');
 
   useEffect(() => {
+    const customerId = params.customerId ? Number(params.customerId) : null;
+    setSelectedCustomerId(Number.isFinite(customerId) ? customerId : null);
+    setSelectedCustomerName(params.customerName || '');
+    setItems([]);
+    setInvoiceDiscountInput('');
+    setInitialPaymentInput('');
+    setNotes('');
+    setError('');
+    setCustomerSearch('');
+    setProductSearch('');
+    setShowCustomerModal(false);
+    setShowProductModal(false);
     setIdempotencyKey(Crypto.randomUUID());
-  }, []);
+  }, [params.customerId, params.customerName, params.draftId]);
 
   const { data: customersRes } = useQuery({
     queryKey: ['customersSelect', customerSearch],
@@ -108,12 +120,14 @@ export default function NewInvoiceScreen() {
   };
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce((sum, item) => sum + itemTotals(item).lineTotal, 0);
+    const itemsSubtotal = items.reduce((sum, item) => sum + itemTotals(item).lineSubtotal, 0);
+    const itemDiscount = items.reduce((sum, item) => sum + itemTotals(item).itemDiscount, 0);
+    const subtotal = itemsSubtotal - itemDiscount;
     const invoiceDiscount = Math.min(subtotal, parseMoneyInput(invoiceDiscountInput));
     const total = subtotal - invoiceDiscount;
     const initialPayment = parseMoneyInput(initialPaymentInput);
     const remaining = Math.max(0, total - initialPayment);
-    return { subtotal, invoiceDiscount, total, initialPayment, remaining };
+    return { itemsSubtotal, itemDiscount, subtotal, invoiceDiscount, total, initialPayment, remaining };
   }, [items, invoiceDiscountInput, initialPaymentInput]);
 
   const handleSubmit = async () => {
@@ -145,7 +159,11 @@ export default function NewInvoiceScreen() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['invoicesList'] });
       queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['customersSelect'] });
+      queryClient.invalidateQueries({ queryKey: ['customerDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['customerDebtSummary'] });
       queryClient.invalidateQueries({ queryKey: ['customerInvoices'] });
+      queryClient.invalidateQueries({ queryKey: ['salesReport'] });
       router.replace(`/(app)/invoices/${res.data.id}`);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'تعذر حفظ الطلبية'));
@@ -211,20 +229,6 @@ export default function NewInvoiceScreen() {
                     </View>
                   </View>
 
-                  <View style={styles.quickRow}>
-                    {[0.5, 1, 2, 4, 6, 10].map((qty) => (
-                      <TouchableOpacity
-                        key={qty}
-                        style={[styles.qtyChip, formatQuantity(item.quantity) === String(qty) && styles.qtyChipActive]}
-                        onPress={() => updateItem(index, { quantity: Math.round(qty * 1000) })}
-                      >
-                        <Text style={[styles.qtyChipText, formatQuantity(item.quantity) === String(qty) && styles.qtyChipTextActive]}>
-                          {qty}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-
                   <Input
                     label="خصم على الصنف"
                     placeholder="مثال: 2.50"
@@ -256,7 +260,17 @@ export default function NewInvoiceScreen() {
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>الحساب والدفع</Text>
           <View style={styles.calcRow}>
-            <Text style={styles.calcLabel}>مجموع الأصناف</Text>
+            <Text style={styles.calcLabel}>إجمالي الأصناف قبل الخصم</Text>
+            <Text style={styles.calcValue}>{formatMoney(totals.itemsSubtotal)}</Text>
+          </View>
+          {totals.itemDiscount > 0 ? (
+            <View style={styles.calcRow}>
+              <Text style={styles.calcLabel}>خصم الأصناف</Text>
+              <Text style={styles.discountValue}>-{formatMoney(totals.itemDiscount)}</Text>
+            </View>
+          ) : null}
+          <View style={styles.calcRow}>
+            <Text style={styles.calcLabel}>إجمالي الأصناف بعد الخصم</Text>
             <Text style={styles.calcValue}>{formatMoney(totals.subtotal)}</Text>
           </View>
 
@@ -269,7 +283,7 @@ export default function NewInvoiceScreen() {
           />
 
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>مجموع الفاتورة</Text>
+            <Text style={styles.totalLabel}>إجمالي الفاتورة</Text>
             <Text style={styles.totalValue}>{formatMoney(totals.total)}</Text>
           </View>
 
@@ -355,51 +369,47 @@ export default function NewInvoiceScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#F4F7FB' },
   content: { padding: 16, paddingBottom: 110 },
   section: { marginBottom: 12 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#0F172A', textAlign: 'right', marginBottom: 10 },
-  customerPicker: { padding: 14, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, backgroundColor: '#F8FAFC' },
-  customerName: { color: '#0F172A', fontWeight: 'bold', fontSize: 16, textAlign: 'right' },
+  sectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#0B1220', textAlign: 'right', marginBottom: 10 },
+  customerPicker: { padding: 14, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, backgroundColor: '#F4F7FB' },
+  customerName: { color: '#0B1220', fontWeight: 'bold', fontSize: 16, textAlign: 'right' },
   placeholderText: { color: '#64748B', fontSize: 15, textAlign: 'right' },
-  addButton: { backgroundColor: '#0284C7', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
+  addButton: { backgroundColor: '#075FD8', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
   addButtonText: { color: '#FFFFFF', fontWeight: 'bold' },
   emptyText: { textAlign: 'center', color: '#94A3B8', paddingVertical: 20 },
   itemBox: { borderWidth: 1, borderColor: '#E2E8F0', backgroundColor: '#FFFFFF', borderRadius: 8, padding: 12, marginBottom: 10 },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  itemName: { flex: 1, color: '#0F172A', fontWeight: 'bold', fontSize: 16, textAlign: 'right' },
+  itemName: { flex: 1, color: '#0B1220', fontWeight: 'bold', fontSize: 16, textAlign: 'right' },
   removeText: { color: '#DC2626', fontWeight: 'bold', paddingHorizontal: 8 },
   inputRow: { flexDirection: 'row', gap: 10 },
   inputCol: { flex: 1 },
   compactInput: { height: 42, fontSize: 14 },
-  quickRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 },
-  qtyChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC' },
-  qtyChipActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
-  qtyChipText: { color: '#334155', fontWeight: '600' },
-  qtyChipTextActive: { color: '#FFFFFF' },
   itemTotalRow: { borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   itemMeta: { color: '#64748B', fontSize: 12, flex: 1, textAlign: 'right', paddingRight: 8 },
-  itemTotal: { color: '#0F172A', fontWeight: 'bold', fontSize: 16 },
+  itemTotal: { color: '#0B1220', fontWeight: 'bold', fontSize: 16 },
   calcRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
   calcLabel: { color: '#475569', fontWeight: '600' },
-  calcValue: { color: '#0F172A', fontWeight: 'bold' },
+  calcValue: { color: '#0B1220', fontWeight: 'bold' },
+  discountValue: { color: '#DC2626', fontWeight: 'bold' },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E2E8F0', marginVertical: 6 },
-  totalLabel: { color: '#0F172A', fontWeight: 'bold', fontSize: 16 },
-  totalValue: { color: '#0284C7', fontWeight: 'bold', fontSize: 18 },
+  totalLabel: { color: '#0B1220', fontWeight: 'bold', fontSize: 16 },
+  totalValue: { color: '#075FD8', fontWeight: 'bold', fontSize: 18 },
   remainingRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#FEF2F2', borderRadius: 8, padding: 10, marginVertical: 8 },
   remainingLabel: { color: '#991B1B', fontWeight: 'bold' },
   remainingValue: { color: '#DC2626', fontWeight: 'bold', fontSize: 16 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E2E8F0', padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   footerLabel: { color: '#64748B', textAlign: 'right', fontSize: 12 },
-  footerTotal: { color: '#0F172A', fontWeight: 'bold', fontSize: 18 },
+  footerTotal: { color: '#0B1220', fontWeight: 'bold', fontSize: 18 },
   saveButton: { minWidth: 170, marginVertical: 0, backgroundColor: '#16A34A' },
   errorBanner: { backgroundColor: '#FEE2E2', color: '#991B1B', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 12, textAlign: 'right' },
   modalContainer: { flex: 1, backgroundColor: '#FFFFFF', padding: 20, paddingTop: 48 },
-  modalTitle: { color: '#0F172A', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
+  modalTitle: { color: '#0B1220', fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 16 },
   modalSearchInput: { height: 44, fontSize: 14 },
   modalEmptyText: { color: '#94A3B8', textAlign: 'center', paddingVertical: 24 },
   modalItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  modalItemText: { color: '#0F172A', fontWeight: 'bold', fontSize: 16, textAlign: 'right' },
+  modalItemText: { color: '#0B1220', fontWeight: 'bold', fontSize: 16, textAlign: 'right' },
   modalSubText: { color: '#64748B', fontSize: 12, textAlign: 'right', marginTop: 2 },
 });

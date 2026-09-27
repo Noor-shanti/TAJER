@@ -19,6 +19,5 @@ ON CONFLICT(symbol) DO NOTHING;
 -- Default Categories (Sample categories for merchant setup)
 INSERT INTO categories (name, is_active)
 VALUES 
-  ('سجائر ومشروبات', 1),
-  ('مواد غذائية', 1),
-  ('عام', 1);
+  ('سجائر', 1),
+  ('مواد غذائية', 1);

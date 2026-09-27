@@ -1,4 +1,4 @@
-import type { ApiSuccessResponse, Invoice, InvoiceListItem, Payment } from '@merchant/shared';
+import type { ApiSuccessResponse, Invoice, InvoiceListItem, Payment, SalesReport } from '@merchant/shared';
 import { apiClient } from '../../../services/api/client';
 
 export interface CreateInvoiceItemPayload {
@@ -41,6 +41,12 @@ export const invoicesApi = {
 
   async getInvoiceById(id: number): Promise<ApiSuccessResponse<Invoice>> {
     return await apiClient<ApiSuccessResponse<Invoice>>(`/invoices/${id}`);
+  },
+
+  async getSalesReport(from: string, to: string): Promise<ApiSuccessResponse<SalesReport>> {
+    return await apiClient<ApiSuccessResponse<SalesReport>>('/invoices/reports/sales', {
+      params: { from, to },
+    });
   },
 
   async createInvoice(payload: CreateInvoicePayload): Promise<ApiSuccessResponse<{ id: number; invoiceNumber: string }>> {

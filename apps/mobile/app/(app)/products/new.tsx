@@ -90,6 +90,7 @@ export default function NewProductScreen() {
         currentPrice: parsedPrice,
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['productsSelect'] });
       router.replace('/(app)/products');
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'تعذر حفظ المنتج'));
@@ -210,26 +211,26 @@ export default function NewProductScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#F4F7FB' },
   content: { padding: 16, paddingBottom: 32 },
   header: { marginBottom: 14 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#0F172A', textAlign: 'right' },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#0B1220', textAlign: 'right' },
   subtitle: { fontSize: 14, color: '#64748B', marginTop: 4, textAlign: 'right', lineHeight: 22 },
   section: { marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#0F172A', marginBottom: 12, textAlign: 'right' },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#0B1220', marginBottom: 12, textAlign: 'right' },
   chipsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' },
-  chipSelected: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
+  chipSelected: { backgroundColor: '#0B1220', borderColor: '#0B1220' },
   chipText: { fontSize: 13, color: '#334155', fontWeight: '600' },
   chipTextSelected: { color: '#FFFFFF' },
   inlineCreateRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   inlineInputWrap: { flex: 1 },
   inlineInput: { height: 42 },
-  inlineButton: { width: 96, height: 42, marginVertical: 0, backgroundColor: '#0284C7' },
-  saveBtn: { marginTop: 4, backgroundColor: '#0F172A' },
+  inlineButton: { width: 96, height: 42, marginVertical: 0, backgroundColor: '#075FD8' },
+  saveBtn: { marginTop: 4, backgroundColor: '#0B1220' },
   errorBanner: { backgroundColor: '#FEE2E2', color: '#991B1B', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 12, textAlign: 'right' },
   previewRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 8, padding: 12, marginTop: 4 },
   previewLabel: { color: '#475569', fontSize: 13, fontWeight: '600' },
-  previewValue: { color: '#0F172A', fontSize: 16, fontWeight: 'bold' },
+  previewValue: { color: '#0B1220', fontSize: 16, fontWeight: 'bold' },
   hint: { color: '#64748B', fontSize: 13, lineHeight: 20, textAlign: 'right' },
 });
