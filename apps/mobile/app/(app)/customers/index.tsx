@@ -30,7 +30,7 @@ export default function CustomersScreen() {
           style={styles.searchInput}
         />
         <Button
-          title="➕ إضافة زبون"
+          title="➕ إضافة زبون جديد"
           onPress={() => router.push('/(app)/customers/new')}
           style={styles.addBtn}
         />
@@ -43,36 +43,45 @@ export default function CustomersScreen() {
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          !isLoading ? (
-            <Text style={styles.emptyText}>لا يوجد زبائن مطايقون للبحث</Text>
-          ) : null
+          !isLoading ? <Text style={styles.emptyText}>لا يوجد زبائن مطابقون للبحث</Text> : null
         }
         renderItem={({ item }) => (
           <Card style={styles.customerCard}>
             <View style={styles.cardHeader}>
-              <Text style={styles.customerName}>{item.name}</Text>
-              {item.phone ? <Text style={styles.phoneText}>{item.phone}</Text> : null}
+              <TouchableOpacity onPress={() => router.push(`/(app)/customers/${item.id}`)}>
+                <Text style={styles.customerName}>{item.name}</Text>
+                {item.phone ? <Text style={styles.phoneText}>📞 {item.phone}</Text> : null}
+              </TouchableOpacity>
             </View>
 
             <View style={styles.cardFooter}>
               <View>
-                <Text style={styles.balanceLabel}>المتبقي الذمم:</Text>
+                <Text style={styles.balanceLabel}>إجمالي الديون والذمم:</Text>
                 <Text style={item.totalRemaining > 0 ? styles.balanceValueDanger : styles.balanceValueClean}>
                   {formatMoney(item.totalRemaining)}
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={styles.newInvoiceBtn}
-                onPress={() =>
-                  router.push({
-                    pathname: '/(app)/invoices/new',
-                    params: { customerId: item.id, customerName: item.name },
-                  })
-                }
-              >
-                <Text style={styles.newInvoiceBtnText}>طلبية جديدة</Text>
-              </TouchableOpacity>
+              <View style={styles.actionButtonsRow}>
+                <TouchableOpacity
+                  style={styles.ledgerBtn}
+                  onPress={() => router.push(`/(app)/customers/${item.id}`)}
+                >
+                  <Text style={styles.ledgerBtnText}>📋 كشف الفواتير</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.newInvoiceBtn}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(app)/invoices/new',
+                      params: { customerId: item.id, customerName: item.name },
+                    })
+                  }
+                >
+                  <Text style={styles.newInvoiceBtnText}>➕ طلبية</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </Card>
         )}
@@ -117,7 +126,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   customerName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#0F172A',
     textAlign: 'right',
@@ -138,24 +147,39 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   balanceValueDanger: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#DC2626',
   },
   balanceValueClean: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#16A34A',
   },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  ledgerBtn: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  ledgerBtnText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
   newInvoiceBtn: {
     backgroundColor: '#0F172A',
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 8,
   },
   newInvoiceBtnText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
-    fontSize: 13,
+    fontSize: 12,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { Button } from '../../../src/components/common/Button';
@@ -11,23 +11,43 @@ import { formatMoney } from '../../../src/utils/money';
 export default function ProductsScreen() {
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['products', search],
     queryFn: () => productsApi.getProducts(search, 1),
   });
 
-  const products = data?.data || [];
+  const products = (data?.data || []).filter((p) => {
+    if (selectedCategory === 'ALL') return true;
+    return p.categoryName === selectedCategory;
+  });
 
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
         <Input
-          placeholder="ابحث باسم المنتج أو الأصناف..."
+          placeholder="ابحث باسم المنتج أو الاصناف..."
           value={search}
           onChangeText={setSearch}
           style={styles.searchInput}
         />
+
+        {/* Category Filters */}
+        <View style={styles.categoryChipsRow}>
+          {['ALL', 'سجائر ومشروبات', 'مواد غذائية', 'عام'].map((cat) => (
+            <TouchableOpacity
+              key={cat}
+              style={[styles.catChip, selectedCategory === cat && styles.catChipActive]}
+              onPress={() => setSelectedCategory(cat)}
+            >
+              <Text style={[styles.catText, selectedCategory === cat && styles.catTextActive]}>
+                {cat === 'ALL' ? 'الكل' : cat}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <Button
           title="➕ إضافة منتج جديد"
           onPress={() => router.push('/(app)/products/new')}
@@ -41,9 +61,7 @@ export default function ProductsScreen() {
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          !isLoading ? (
-            <Text style={styles.emptyText}>لا يوجد منتجات في القائمة</Text>
-          ) : null
+          !isLoading ? <Text style={styles.emptyText}>لا يوجد منتجات في هذا التصنيف</Text> : null
         }
         renderItem={({ item }) => (
           <Card style={styles.productCard}>
@@ -51,7 +69,7 @@ export default function ProductsScreen() {
               <View>
                 <Text style={styles.productName}>{item.name}</Text>
                 {item.categoryName ? (
-                  <Text style={styles.categoryBadge}>{item.categoryName}</Text>
+                  <Text style={styles.categoryBadge}>🏷️ {item.categoryName}</Text>
                 ) : null}
               </View>
               <View style={styles.priceContainer}>
@@ -67,62 +85,22 @@ export default function ProductsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  topBar: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  searchInput: {
-    marginBottom: 8,
-  },
-  addBtn: {
-    height: 44,
-    backgroundColor: '#0284C7',
-  },
-  listContent: {
-    padding: 16,
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#94A3B8',
-    marginTop: 40,
-    fontSize: 15,
-  },
-  productCard: {
-    marginBottom: 10,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    textAlign: 'right',
-  },
-  categoryBadge: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-    textAlign: 'right',
-  },
-  priceContainer: {
-    alignItems: 'flex-end',
-  },
-  priceText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0F172A',
-  },
-  unitText: {
-    fontSize: 11,
-    color: '#64748B',
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  topBar: { padding: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  searchInput: { marginBottom: 8 },
+  categoryChipsRow: { flexDirection: 'row', gap: 6, marginBottom: 10, flexWrap: 'wrap' },
+  catChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' },
+  catChipActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
+  catText: { fontSize: 12, color: '#334155', fontWeight: '500' },
+  catTextActive: { color: '#FFFFFF', fontWeight: 'bold' },
+  addBtn: { height: 44, backgroundColor: '#0284C7' },
+  listContent: { padding: 16 },
+  emptyText: { textAlign: 'center', color: '#94A3B8', marginTop: 40, fontSize: 15 },
+  productCard: { marginBottom: 10 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  productName: { fontSize: 16, fontWeight: 'bold', color: '#0F172A', textAlign: 'right' },
+  categoryBadge: { fontSize: 12, color: '#64748B', marginTop: 2, textAlign: 'right' },
+  priceContainer: { alignItems: 'flex-end' },
+  priceText: { fontSize: 16, fontWeight: 'bold', color: '#0F172A' },
+  unitText: { fontSize: 11, color: '#64748B' },
 });

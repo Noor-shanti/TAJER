@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
@@ -71,22 +71,34 @@ export default function InvoiceDetailScreen() {
       <Card style={styles.headerCard}>
         <View style={styles.headerRow}>
           <Text style={styles.invNumber}>{invoice.invoiceNumber}</Text>
-          <Badge
-            label={
-              invoice.paymentStatus === 'PAID'
-                ? 'مدفوعة بالكامل'
-                : invoice.paymentStatus === 'PARTIALLY_PAID'
-                ? 'مدفوعة جزئياً'
-                : 'غير مدفوعة'
-            }
-            variant={
-              invoice.paymentStatus === 'PAID'
-                ? 'success'
-                : invoice.paymentStatus === 'PARTIALLY_PAID'
-                ? 'warning'
-                : 'danger'
-            }
-          />
+          <View style={styles.badgesCol}>
+            <Badge
+              label={
+                invoice.orderStatus === 'CONFIRMED'
+                  ? 'طلبية مؤكدة'
+                  : invoice.orderStatus === 'COMPLETED'
+                  ? 'طلبية مكتملة'
+                  : 'طلبية ملغاة'
+              }
+              variant={invoice.orderStatus === 'CANCELLED' ? 'danger' : 'info'}
+            />
+            <Badge
+              label={
+                invoice.paymentStatus === 'PAID'
+                  ? 'مدفوعة بالكامل'
+                  : invoice.paymentStatus === 'PARTIALLY_PAID'
+                  ? 'متبقي جزئي'
+                  : 'غير مدفوعة'
+              }
+              variant={
+                invoice.paymentStatus === 'PAID'
+                  ? 'success'
+                  : invoice.paymentStatus === 'PARTIALLY_PAID'
+                  ? 'warning'
+                  : 'danger'
+              }
+            />
+          </View>
         </View>
 
         <Text style={styles.customerName}>الزبون: {invoice.customerName}</Text>
@@ -111,7 +123,7 @@ export default function InvoiceDetailScreen() {
 
       {/* Financial Summary & Action */}
       <Card style={styles.summaryCard}>
-        <Text style={styles.sectionTitle}>الملخص المالي</Text>
+        <Text style={styles.sectionTitle}>الملخص المالي وتسديد الذمم</Text>
 
         <View style={styles.calcRow}>
           <Text style={styles.label}>مجموع الأصناف:</Text>
@@ -119,23 +131,23 @@ export default function InvoiceDetailScreen() {
         </View>
 
         <View style={styles.calcRowHighlight}>
-          <Text style={styles.labelBold}>المجموع النهائي:</Text>
+          <Text style={styles.labelBold}>المجموع النهائي للفاتورة:</Text>
           <Text style={styles.valBold}>{formatMoney(invoice.total)}</Text>
         </View>
 
         <View style={styles.calcRow}>
-          <Text style={styles.label}>إجمالي المدفوع:</Text>
+          <Text style={styles.label}>إجمالي المدفوع حتى الآن:</Text>
           <Text style={styles.valGreen}>{formatMoney(invoice.amountPaid)}</Text>
         </View>
 
         <View style={styles.calcRowDanger}>
-          <Text style={styles.labelDanger}>المتبقي غير المدفوع:</Text>
+          <Text style={styles.labelDanger}>المتبقي غير المدفوع (الدين):</Text>
           <Text style={styles.valDanger}>{formatMoney(invoice.remaining)}</Text>
         </View>
 
         {invoice.remaining > 0 ? (
           <Button
-            title="💳 تسديد دفعة جديدة"
+            title="💳 تسديد دفعة جديدة للفاتورة"
             onPress={() => setShowPaymentModal(true)}
             style={styles.payBtn}
           />
@@ -187,173 +199,38 @@ export default function InvoiceDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  content: {
-    padding: 16,
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#64748B',
-  },
-  headerCard: {
-    marginBottom: 12,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  invNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0F172A',
-  },
-  customerName: {
-    fontSize: 16,
-    color: '#334155',
-    fontWeight: '600',
-    textAlign: 'right',
-  },
-  dateText: {
-    fontSize: 12,
-    color: '#64748B',
-    textAlign: 'right',
-    marginTop: 4,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    textAlign: 'right',
-    marginBottom: 10,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  itemName: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#0F172A',
-  },
-  itemSub: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  itemTotal: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#0F172A',
-  },
-  summaryCard: {
-    marginTop: 12,
-  },
-  calcRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-  },
-  calcRowHighlight: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#E2E8F0',
-    marginVertical: 6,
-  },
-  calcRowDanger: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    backgroundColor: '#FEF2F2',
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    marginVertical: 8,
-  },
-  label: {
-    color: '#475569',
-  },
-  val: {
-    fontWeight: 'bold',
-    color: '#0F172A',
-  },
-  labelBold: {
-    fontWeight: 'bold',
-    color: '#0F172A',
-  },
-  valBold: {
-    fontWeight: 'bold',
-    fontSize: 16,
-    color: '#0284C7',
-  },
-  valGreen: {
-    fontWeight: 'bold',
-    color: '#16A34A',
-  },
-  labelDanger: {
-    fontWeight: 'bold',
-    color: '#991B1B',
-  },
-  valDanger: {
-    fontWeight: 'bold',
-    fontSize: 16,
-    color: '#DC2626',
-  },
-  payBtn: {
-    backgroundColor: '#16A34A',
-    marginTop: 12,
-  },
-  paidNotice: {
-    textAlign: 'center',
-    color: '#16A34A',
-    fontWeight: 'bold',
-    paddingVertical: 10,
-  },
-  modalContainer: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#FFFFFF',
-    marginTop: 40,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0F172A',
-    textAlign: 'center',
-  },
-  modalSub: {
-    fontSize: 13,
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  modalPayBtn: {
-    backgroundColor: '#16A34A',
-    marginTop: 16,
-  },
-  modalCancelBtn: {
-    marginTop: 8,
-  },
-  errorBanner: {
-    backgroundColor: '#FEE2E2',
-    color: '#991B1B',
-    padding: 10,
-    borderRadius: 8,
-    fontSize: 13,
-    marginBottom: 12,
-    textAlign: 'right',
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  content: { padding: 16 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { color: '#64748B' },
+  headerCard: { marginBottom: 12 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  badgesCol: { gap: 4, alignItems: 'flex-end' },
+  invNumber: { fontSize: 18, fontWeight: 'bold', color: '#0F172A' },
+  customerName: { fontSize: 16, color: '#334155', fontWeight: '600', textAlign: 'right' },
+  dateText: { fontSize: 12, color: '#64748B', textAlign: 'right', marginTop: 4 },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#0F172A', textAlign: 'right', marginBottom: 10 },
+  itemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  itemName: { fontSize: 15, fontWeight: 'bold', color: '#0F172A' },
+  itemSub: { fontSize: 12, color: '#64748B' },
+  itemTotal: { fontSize: 15, fontWeight: 'bold', color: '#0F172A' },
+  summaryCard: { marginTop: 12 },
+  calcRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
+  calcRowHighlight: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E2E8F0', marginVertical: 6 },
+  calcRowDanger: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, backgroundColor: '#FEF2F2', paddingHorizontal: 10, borderRadius: 8, marginVertical: 8 },
+  label: { color: '#475569' },
+  val: { fontWeight: 'bold', color: '#0F172A' },
+  labelBold: { fontWeight: 'bold', color: '#0F172A' },
+  valBold: { fontWeight: 'bold', fontSize: 16, color: '#0284C7' },
+  valGreen: { fontWeight: 'bold', color: '#16A34A' },
+  labelDanger: { fontWeight: 'bold', color: '#991B1B' },
+  valDanger: { fontWeight: 'bold', fontSize: 16, color: '#DC2626' },
+  payBtn: { backgroundColor: '#16A34A', marginTop: 12 },
+  paidNotice: { textAlign: 'center', color: '#16A34A', fontWeight: 'bold', paddingVertical: 10 },
+  modalContainer: { flex: 1, padding: 20, backgroundColor: '#FFFFFF', marginTop: 40 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0F172A', textAlign: 'center' },
+  modalSub: { fontSize: 13, color: '#64748B', textAlign: 'center', marginBottom: 20 },
+  modalPayBtn: { backgroundColor: '#16A34A', marginTop: 16 },
+  modalCancelBtn: { marginTop: 8 },
+  errorBanner: { backgroundColor: '#FEE2E2', color: '#991B1B', padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 12, textAlign: 'right' },
 });
