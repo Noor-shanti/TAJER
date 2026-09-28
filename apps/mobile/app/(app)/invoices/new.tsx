@@ -12,7 +12,7 @@ import { customersApi } from '../../../src/features/customers/api/customersApi';
 import { invoicesApi, type CreateInvoiceItemPayload } from '../../../src/features/invoices/api/invoicesApi';
 import { productsApi } from '../../../src/features/products/api/productsApi';
 import { formatMoney, parseMoneyInput } from '../../../src/utils/money';
-import { formatQuantity, parseQuantityInput } from '../../../src/utils/quantity';
+import { formatQuantity, formatQuantitySummary, parseQuantityInput } from '../../../src/utils/quantity';
 
 function getErrorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
@@ -26,7 +26,7 @@ function moneyInputValue(value: number) {
 export default function NewInvoiceScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const params = useLocalSearchParams<{ customerId?: string; customerName?: string; draftId?: string }>();
+  const params = useLocalSearchParams<{ customerId?: string; customerName?: string; draftId?: string; returnTo?: string }>();
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(
     params.customerId ? Number(params.customerId) : null
@@ -42,6 +42,7 @@ export default function NewInvoiceScreen() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [customerSearch, setCustomerSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  const [stockByProductId, setStockByProductId] = useState<Record<number, number>>({});
   const [idempotencyKey, setIdempotencyKey] = useState('');
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function NewInvoiceScreen() {
     setError('');
     setCustomerSearch('');
     setProductSearch('');
+    setStockByProductId({});
     setShowCustomerModal(false);
     setShowProductModal(false);
     setIdempotencyKey(Crypto.randomUUID());
@@ -81,28 +83,28 @@ export default function NewInvoiceScreen() {
 
   const addProduct = (product: Product) => {
     setShowProductModal(false);
-    const existingIndex = items.findIndex((item) => item.productId === product.id);
-    if (existingIndex >= 0) {
-      setItems((prev) =>
-        prev.map((item, index) =>
+    setStockByProductId((current) => ({ ...current, [product.id]: product.stockQuantity }));
+    setItems((currentItems) => {
+      const existingIndex = currentItems.findIndex((item) => item.productId === product.id);
+      if (existingIndex >= 0) {
+        return currentItems.map((item, index) =>
           index === existingIndex ? { ...item, quantity: item.quantity + 1000 } : item
-        )
-      );
-      return;
-    }
+        );
+      }
 
-    setItems((prev) => [
-      ...prev,
-      {
-        productId: product.id,
-        productNameSnapshot: product.name,
-        unitNameSnapshot: product.unitNameAr,
-        quantity: 1000,
-        unitPrice: product.currentPrice,
-        discountType: 'NONE',
-        discountValue: 0,
-      },
-    ]);
+      return [
+        ...currentItems,
+        {
+          productId: product.id,
+          productNameSnapshot: product.name,
+          unitNameSnapshot: product.unitNameAr,
+          quantity: 1000,
+          unitPrice: product.currentPrice,
+          discountType: 'NONE',
+          discountValue: 0,
+        },
+      ];
+    });
   };
 
   const updateItem = (index: number, patch: Partial<CreateInvoiceItemPayload>) => {
@@ -129,6 +131,10 @@ export default function NewInvoiceScreen() {
     const remaining = Math.max(0, total - initialPayment);
     return { itemsSubtotal, itemDiscount, subtotal, invoiceDiscount, total, initialPayment, remaining };
   }, [items, invoiceDiscountInput, initialPaymentInput]);
+  const quantitySummary = useMemo(
+    () => formatQuantitySummary(items.map((item) => ({ quantity: item.quantity, unitName: item.unitNameSnapshot }))),
+    [items]
+  );
 
   const handleSubmit = async () => {
     if (!selectedCustomerId) {
@@ -137,6 +143,11 @@ export default function NewInvoiceScreen() {
     }
     if (items.length === 0) {
       setError('أضف صنفا واحدا على الأقل');
+      return;
+    }
+    const insufficientItem = items.find((item) => item.productId && stockByProductId[item.productId] !== undefined && item.quantity > stockByProductId[item.productId]);
+    if (insufficientItem) {
+      setError(`المتوفر من ${insufficientItem.productNameSnapshot} لا يكفي لهذه الكمية`);
       return;
     }
     if (totals.initialPayment > totals.total) {
@@ -164,7 +175,8 @@ export default function NewInvoiceScreen() {
       queryClient.invalidateQueries({ queryKey: ['customerDebtSummary'] });
       queryClient.invalidateQueries({ queryKey: ['customerInvoices'] });
       queryClient.invalidateQueries({ queryKey: ['salesReport'] });
-      router.replace(`/(app)/invoices/${res.data.id}`);
+      queryClient.invalidateQueries({ queryKey: ['lowStock'] });
+      router.replace({ pathname: '/(app)/invoices/[id]', params: { id: res.data.id, ...(params.returnTo ? { returnTo: params.returnTo } : {}) } });
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'تعذر حفظ الطلبية'));
     } finally {
@@ -200,7 +212,7 @@ export default function NewInvoiceScreen() {
             items.map((item, index) => {
               const { lineSubtotal, itemDiscount, lineTotal } = itemTotals(item);
               return (
-                <View key={`${item.productId || item.productNameSnapshot}-${index}`} style={styles.itemBox}>
+                <View key={String(item.productId || item.productNameSnapshot)} style={styles.itemBox}>
                   <View style={styles.itemHeader}>
                     <TouchableOpacity onPress={() => removeItem(index)}>
                       <Text style={styles.removeText}>حذف</Text>
@@ -243,6 +255,7 @@ export default function NewInvoiceScreen() {
                     style={styles.compactInput}
                   />
 
+                  {item.productId && stockByProductId[item.productId] !== undefined ? <Text style={styles.stockMeta}>المتوفر: {formatQuantity(stockByProductId[item.productId])} {item.unitNameSnapshot}</Text> : null}
                   <View style={styles.itemTotalRow}>
                     <Text style={styles.itemMeta}>
                       {itemDiscount > 0
@@ -259,6 +272,10 @@ export default function NewInvoiceScreen() {
 
         <Card style={styles.section}>
           <Text style={styles.sectionTitle}>الحساب والدفع</Text>
+          <View style={styles.orderSummaryRow}>
+            <View><Text style={styles.orderSummaryLabel}>عدد الأنواع</Text><Text style={styles.orderSummaryValue}>{items.length}</Text></View>
+            <View style={styles.orderSummaryRight}><Text style={styles.orderSummaryLabel}>إجمالي الكمية</Text><Text style={styles.orderSummaryValue}>{quantitySummary || '0'}</Text></View>
+          </View>
           <View style={styles.calcRow}>
             <Text style={styles.calcLabel}>إجمالي الأصناف قبل الخصم</Text>
             <Text style={styles.calcValue}>{formatMoney(totals.itemsSubtotal)}</Text>
@@ -358,6 +375,7 @@ export default function NewInvoiceScreen() {
               <TouchableOpacity style={styles.modalItem} onPress={() => addProduct(item)}>
                 <Text style={styles.modalItemText}>{item.name}</Text>
                 <Text style={styles.modalSubText}>{formatMoney(item.currentPrice)} / {item.unitNameAr}</Text>
+                <Text style={styles.modalSubText}>المتوفر: {formatQuantity(item.stockQuantity)} {item.unitNameAr}</Text>
               </TouchableOpacity>
             )}
           />
@@ -389,8 +407,11 @@ const styles = StyleSheet.create({
   compactInput: { height: 42, fontSize: 14 },
   itemTotalRow: { borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   itemMeta: { color: '#64748B', fontSize: 12, flex: 1, textAlign: 'right', paddingRight: 8 },
+  stockMeta: { color: '#075FD8', fontSize: 12, textAlign: 'right', marginTop: 8 },
   itemTotal: { color: '#0B1220', fontWeight: 'bold', fontSize: 16 },
   calcRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
+  orderSummaryRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#EAF2FF', borderRadius: 8, padding: 10, marginBottom: 8 },
+  orderSummaryRight: { alignItems: 'flex-end', flex: 1 }, orderSummaryLabel: { color: '#52657C', fontSize: 12 }, orderSummaryValue: { color: '#075FD8', fontWeight: '900', marginTop: 3 },
   calcLabel: { color: '#475569', fontWeight: '600' },
   calcValue: { color: '#0B1220', fontWeight: 'bold' },
   discountValue: { color: '#DC2626', fontWeight: 'bold' },

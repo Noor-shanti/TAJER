@@ -33,9 +33,15 @@ export const createProductSchema = z.object({
   categoryId: z.number().int().positive().optional().nullable(),
   unitId: z.number().int().positive('وحدة القياس مطلوبة'),
   currentPrice: z.number().int().nonnegative('السعر يجب أن يكون صفرا أو أكثر'), // In minor units (agorot)
+  stockQuantity: z.number().int().nonnegative('الكمية المتوفرة يجب أن تكون صفرا أو أكثر'),
+  reorderLevel: z.number().int().nonnegative('حد التنبيه يجب أن يكون صفرا أو أكثر'),
 });
 
-export const updateProductSchema = createProductSchema.partial().extend({
+export const updateProductSchema = z.object({
+  name: z.string().trim().min(1, 'اسم المنتج مطلوب').optional(),
+  categoryId: z.number().int().positive().optional().nullable(),
+  unitId: z.number().int().positive().optional(),
+  currentPrice: z.number().int().nonnegative().optional(),
   isActive: z.boolean().optional(),
 });
 

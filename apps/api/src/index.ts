@@ -7,6 +7,7 @@ import auditRoutes from './routes/audit.routes';
 import categoriesRoutes from './routes/categories.routes';
 import customersRoutes from './routes/customers.routes';
 import invoicesRoutes from './routes/invoices.routes';
+import inventoryRoutes from './routes/inventory.routes';
 import productsRoutes from './routes/products.routes';
 import unitsRoutes from './routes/units.routes';
 import type { Env, Variables } from './types/env.types';
@@ -44,5 +45,6 @@ app.route('/api/v1/categories', categoriesRoutes);
 app.route('/api/v1/units', unitsRoutes);
 app.route('/api/v1/products', productsRoutes);
 app.route('/api/v1/invoices', invoicesRoutes);
+app.route('/api/v1/inventory', inventoryRoutes);
 
 export default app;

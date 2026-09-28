@@ -87,9 +87,24 @@ export interface Product {
   name: string;
   /** Current price in minor units (agorot). May differ from invoice snapshot price. */
   currentPrice: number;
+  /** Available quantity in minor quantity units. 500 = 0.5 carton. */
+  stockQuantity: number;
+  /** Alert level in minor quantity units. */
+  reorderLevel: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StockMovement {
+  id: number;
+  productId: number;
+  movementType: 'ADJUSTMENT' | 'RECEIPT' | 'SALE' | 'CANCELLATION';
+  quantityDelta: number;
+  balanceAfter: number;
+  invoiceId: number | null;
+  notes: string | null;
+  createdAt: string;
 }
 
 // ─── Invoice Item ──────────────────────────────────────────────────────────

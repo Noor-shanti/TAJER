@@ -7,6 +7,7 @@ import { Card } from '../../../src/components/common/Card';
 import { Input } from '../../../src/components/common/Input';
 import { productsApi } from '../../../src/features/products/api/productsApi';
 import { formatMoney, parseMoneyInput } from '../../../src/utils/money';
+import { parseQuantityInput } from '../../../src/utils/quantity';
 
 function getErrorMessage(err: unknown, fallback: string) {
   return err instanceof Error ? err.message : fallback;
@@ -18,6 +19,8 @@ export default function NewProductScreen() {
 
   const [name, setName] = useState('');
   const [priceInput, setPriceInput] = useState('');
+  const [initialStockInput, setInitialStockInput] = useState('');
+  const [reorderLevelInput, setReorderLevelInput] = useState('');
   const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -80,6 +83,15 @@ export default function NewProductScreen() {
       return;
     }
 
+    if (!initialStockInput.trim()) {
+      setError('أدخل الكمية المتوفرة عند إضافة المنتج');
+      return;
+    }
+    if (!reorderLevelInput.trim()) {
+      setError('أدخل حد التنبيه للمخزون');
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
@@ -88,9 +100,12 @@ export default function NewProductScreen() {
         unitId: selectedUnitId,
         categoryId: selectedCategoryId || undefined,
         currentPrice: parsedPrice,
+        stockQuantity: parseQuantityInput(initialStockInput),
+        reorderLevel: parseQuantityInput(reorderLevelInput),
       });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['productsSelect'] });
+      queryClient.invalidateQueries({ queryKey: ['lowStock'] });
       router.replace('/(app)/products');
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'تعذر حفظ المنتج'));
@@ -198,6 +213,24 @@ export default function NewProductScreen() {
         ) : (
           <Text style={styles.hint}>اختر الوحدة التي يفهمها التاجر عند البيع.</Text>
         )}
+      </Card>
+
+      <Card style={styles.section}>
+        <Text style={styles.sectionTitle}>المخزون عند الإضافة</Text>
+        <Input
+          label={selectedUnit ? `الكمية المتوفرة الآن (${selectedUnit.nameAr})` : 'الكمية المتوفرة الآن'}
+          placeholder="مثال: 12 أو 0.5"
+          value={initialStockInput}
+          onChangeText={setInitialStockInput}
+          keyboardType="decimal-pad"
+        />
+        <Input
+          label={selectedUnit ? `تنبيه عند الوصول إلى (${selectedUnit.nameAr})` : 'تنبيه عند الوصول إلى'}
+          placeholder="مثال: 3"
+          value={reorderLevelInput}
+          onChangeText={setReorderLevelInput}
+          keyboardType="decimal-pad"
+        />
       </Card>
 
       <Button

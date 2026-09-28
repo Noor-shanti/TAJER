@@ -24,3 +24,14 @@ export function parseQuantityInput(input: string): number {
   if (isNaN(num)) return 0;
   return Math.round(num * QUANTITY_SCALE);
 }
+
+/** Groups quantities by their real unit so cartons and pieces are never added together misleadingly. */
+export function formatQuantitySummary(items: Array<{ quantity: number; unitName: string }>): string {
+  const totals = new Map<string, number>();
+  for (const item of items) {
+    totals.set(item.unitName, (totals.get(item.unitName) || 0) + item.quantity);
+  }
+  return Array.from(totals.entries())
+    .map(([unitName, quantity]) => `${formatQuantity(quantity)} ${unitName}`)
+    .join(' + ');
+}

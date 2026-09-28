@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS products (
   unit_id       INTEGER NOT NULL REFERENCES product_units(id),
   name          TEXT    NOT NULL,
   current_price INTEGER NOT NULL CHECK (current_price >= 0), -- Minor units (agorot / cents)
+  stock_quantity INTEGER NOT NULL DEFAULT 0, -- Scale factor 1000, supports 0.5 carton
+  reorder_level  INTEGER NOT NULL DEFAULT 0,
   is_active     INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
   created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))

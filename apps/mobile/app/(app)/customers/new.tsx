@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Button } from '../../../src/components/common/Button';
 import { Card } from '../../../src/components/common/Card';
 import { Input } from '../../../src/components/common/Input';
@@ -13,6 +13,7 @@ function getErrorMessage(err: unknown, fallback: string) {
 
 export default function NewCustomerScreen() {
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -37,7 +38,7 @@ export default function NewCustomerScreen() {
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['customersSelect'] });
       queryClient.invalidateQueries({ queryKey: ['customerDebtSummary'] });
-      router.replace(`/(app)/customers/${res.data.id}`);
+      router.replace({ pathname: '/(app)/customers/[id]', params: { id: res.data.id, ...(returnTo ? { returnTo } : {}) } });
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'تعذر حفظ الزبون'));
     } finally {

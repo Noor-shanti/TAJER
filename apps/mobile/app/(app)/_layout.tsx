@@ -1,8 +1,9 @@
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
+import { Alert, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useGlobalSearchParams, useRouter } from 'expo-router';
 import type { ColorValue } from 'react-native';
+import { authApi } from '../../src/features/auth/api/authApi';
 
 const BLUE = '#075FD8';
 const MUTED = '#8A94A6';
@@ -17,6 +18,34 @@ function tabIcon(name: TabIconName, activeName: TabIconName = name) {
 
 export default function AppLayout() {
   const router = useRouter();
+  const { returnTo } = useGlobalSearchParams<{ returnTo?: string }>();
+
+  const goBack = (fallback: string) => {
+    const origin = Array.isArray(returnTo) ? returnTo[0] : returnTo;
+    if (origin?.startsWith('/(app)/')) {
+      router.replace(origin as never);
+      return;
+    }
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace(fallback as never);
+  };
+
+  const requestLogout = () => {
+    Alert.alert('تسجيل الخروج', 'هل تريد الخروج من حساب التاجر على هذا الجهاز؟', [
+      { text: 'إلغاء', style: 'cancel' },
+      {
+        text: 'تسجيل الخروج',
+        style: 'destructive',
+        onPress: async () => {
+          await authApi.logout();
+          router.replace('/(auth)/login');
+        },
+      },
+    ]);
+  };
 
   const backOptions = (title: string, fallback: string) => ({
     href: null,
@@ -25,7 +54,7 @@ export default function AppLayout() {
       <TouchableOpacity
         accessibilityRole="button"
         accessibilityLabel="رجوع"
-        onPress={() => (router.canGoBack() ? router.back() : router.replace(fallback as never))}
+        onPress={() => goBack(fallback)}
         style={{ paddingHorizontal: 14, paddingVertical: 8 }}
       >
         <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
@@ -42,8 +71,18 @@ export default function AppLayout() {
           elevation: 0,
         },
         headerTintColor: '#FFFFFF',
-        headerTitleStyle: { fontWeight: '800', fontSize: 17 },
+        headerTitleStyle: {
+          color: '#FFFFFF',
+          fontWeight: '800',
+          fontSize: 21,
+          transform: [{ translateY: -22 }],
+        },
         headerTitleAlign: 'center',
+        headerRight: () => (
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="تسجيل الخروج" onPress={requestLogout} style={{ paddingHorizontal: 14, paddingVertical: 8 }}>
+            <Ionicons name="log-out-outline" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        ),
         tabBarActiveTintColor: BLUE,
         tabBarInactiveTintColor: MUTED,
         tabBarStyle: {

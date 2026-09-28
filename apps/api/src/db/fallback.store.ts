@@ -44,6 +44,31 @@ export const fallbackInvoices: any[] = [
 
 export const fallbackAuditLogs: any[] = [];
 
+const fallbackStock = new Map<number, { quantity: number; reorderLevel: number }>([
+  [1, { quantity: 12000, reorderLevel: 3000 }],
+  [2, { quantity: 8000, reorderLevel: 2000 }],
+  [3, { quantity: 2000, reorderLevel: 2000 }],
+]);
+export const fallbackStockMovements: any[] = [];
+
+export function getFallbackStock(productId: number) {
+  return fallbackStock.get(productId) || { quantity: 0, reorderLevel: 0 };
+}
+
+export function setFallbackStock(productId: number, quantity: number, reorderLevel?: number) {
+  const current = getFallbackStock(productId);
+  fallbackStock.set(productId, { quantity, reorderLevel: reorderLevel ?? current.reorderLevel });
+}
+
+export function moveFallbackStock(productId: number, delta: number, movementType: 'ADJUSTMENT' | 'RECEIPT' | 'SALE' | 'CANCELLATION', invoiceId: number | null, notes: string | null) {
+  const current = getFallbackStock(productId);
+  const quantity = current.quantity + delta;
+  if (quantity < 0) throw new Error('الكمية المتوفرة لا تكفي لإتمام الطلبية');
+  setFallbackStock(productId, quantity);
+  fallbackStockMovements.unshift({ id: fallbackStockMovements.length + 1, productId, movementType, quantityDelta: delta, balanceAfter: quantity, invoiceId, notes, createdAt: new Date().toISOString() });
+  return quantity;
+}
+
 export function addFallbackAuditLog(entityType: 'CUSTOMER' | 'PRODUCT' | 'INVOICE', entityId: number, action: string, description: string) {
   fallbackAuditLogs.unshift({ id: fallbackAuditLogs.length + 1, entityType, entityId, action, description, createdAt: new Date().toISOString() });
 }

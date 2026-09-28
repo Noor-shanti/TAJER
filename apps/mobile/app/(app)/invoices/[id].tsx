@@ -12,7 +12,7 @@ import { Card } from '../../../src/components/common/Card';
 import { Input } from '../../../src/components/common/Input';
 import { invoicesApi } from '../../../src/features/invoices/api/invoicesApi';
 import { formatMoney, parseMoneyInput } from '../../../src/utils/money';
-import { formatQuantity } from '../../../src/utils/quantity';
+import { formatQuantity, formatQuantitySummary } from '../../../src/utils/quantity';
 
 type OrderStatus = 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
 
@@ -46,6 +46,7 @@ function invoiceHtml(invoice: Invoice) {
   const itemsSubtotal = invoice.items.reduce((sum, item) => sum + item.lineSubtotal, 0);
   const itemDiscount = Math.max(0, itemsSubtotal - invoice.subtotal);
   const invoiceDiscount = Math.max(0, invoice.subtotal - invoice.total);
+  const quantitySummary = formatQuantitySummary(invoice.items.map((item) => ({ quantity: item.quantity, unitName: item.unitNameSnapshot })));
   const rows = invoice.items.map((item) => `
     <tr>
       <td>${escapeHtml(item.productNameSnapshot)}</td>
@@ -96,6 +97,8 @@ function invoiceHtml(invoice: Invoice) {
         </table>
 
         <div class="summary">
+          <div class="line"><span>عدد الأنواع</span><strong>${invoice.items.length}</strong></div>
+          <div class="line"><span>إجمالي الكمية</span><strong>${quantitySummary}</strong></div>
           <div class="line"><span>إجمالي الأصناف قبل الخصم</span><strong>${formatMoney(itemsSubtotal)}</strong></div>
           ${itemDiscount > 0 ? `<div class="line"><span>خصم الأصناف</span><strong>${formatMoney(itemDiscount)}</strong></div>` : ''}
           <div class="line"><span>إجمالي الأصناف بعد الخصم</span><strong>${formatMoney(invoice.subtotal)}</strong></div>
@@ -137,6 +140,11 @@ export default function InvoiceDetailScreen() {
     queryClient.invalidateQueries({ queryKey: ['customerDebtSummary'] });
     queryClient.invalidateQueries({ queryKey: ['customerInvoices'] });
     queryClient.invalidateQueries({ queryKey: ['salesReport'] });
+    queryClient.invalidateQueries({ queryKey: ['products'] });
+    queryClient.invalidateQueries({ queryKey: ['productsSelect'] });
+    queryClient.invalidateQueries({ queryKey: ['productDetail'] });
+    queryClient.invalidateQueries({ queryKey: ['stockMovements'] });
+    queryClient.invalidateQueries({ queryKey: ['lowStock'] });
   };
 
   const handlePrint = async () => {
@@ -214,6 +222,17 @@ export default function InvoiceDetailScreen() {
     }
   };
 
+  const requestStatusUpdate = (orderStatus: OrderStatus) => {
+    if (orderStatus !== 'CANCELLED') {
+      void handleUpdateStatus(orderStatus);
+      return;
+    }
+    Alert.alert('إلغاء الفاتورة', 'سيتم استبعادها من الذمم والمبيعات، وإرجاع كمياتها إلى المتوفر.', [
+      { text: 'رجوع', style: 'cancel' },
+      { text: 'إلغاء الفاتورة', style: 'destructive', onPress: () => void handleUpdateStatus('CANCELLED') },
+    ]);
+  };
+
   if (isLoading || !invoice) {
     return (
       <View style={styles.center}>
@@ -225,6 +244,7 @@ export default function InvoiceDetailScreen() {
   const itemsSubtotal = invoice.items.reduce((sum, item) => sum + item.lineSubtotal, 0);
   const itemDiscount = Math.max(0, itemsSubtotal - invoice.subtotal);
   const invoiceDiscount = Math.max(0, invoice.subtotal - invoice.total);
+  const quantitySummary = formatQuantitySummary(invoice.items.map((item) => ({ quantity: item.quantity, unitName: item.unitNameSnapshot })));
   const payments = invoice.payments || [];
 
   return (
@@ -239,7 +259,7 @@ export default function InvoiceDetailScreen() {
           />
           <View style={styles.titleBlock}>
             <Text style={styles.invoiceNumber}>{invoice.invoiceNumber}</Text>
-            <TouchableOpacity onPress={() => router.push(`/(app)/customers/${invoice.customerId}`)}>
+            <TouchableOpacity onPress={() => router.push({ pathname: '/(app)/customers/[id]', params: { id: invoice.customerId, returnTo: `/(app)/invoices/${invoiceId}` } })}>
               <Text style={styles.customerName}>{invoice.customerName}</Text>
             </TouchableOpacity>
             <Text style={styles.dateText}>{new Date(invoice.createdAt).toLocaleDateString('ar')}</Text>
@@ -256,29 +276,13 @@ export default function InvoiceDetailScreen() {
           <Badge label={orderLabel(invoice.orderStatus)} variant={invoice.orderStatus === 'CANCELLED' ? 'danger' : 'info'} />
           <View style={styles.statusTitleBlock}>
             <Text style={styles.sectionTitleNoMargin}>حالة الطلبية</Text>
-            <Text style={styles.statusHint}>للمتابعة فقط، وحساب الذمم يعتمد على المتبقي والمدفوع.</Text>
+            {invoice.orderStatus === 'CANCELLED' ? <Text style={styles.statusHint}>تم إرجاع الأصناف إلى المتوفر.</Text> : null}
           </View>
         </View>
-        <View style={styles.statusActions}>
-          {[
-            ['CONFIRMED', 'قيد التجهيز'],
-            ['COMPLETED', 'تم التسليم'],
-            ['CANCELLED', 'ملغاة'],
-          ].map(([value, label]) => (
-            <TouchableOpacity
-              key={value}
-              disabled={statusLoading}
-              style={[
-                styles.statusBtn,
-                invoice.orderStatus === value && styles.statusBtnActive,
-                invoice.orderStatus === value && value === 'CANCELLED' && styles.statusBtnDanger,
-              ]}
-              onPress={() => handleUpdateStatus(value as OrderStatus)}
-            >
-              <Text style={[styles.statusBtnText, invoice.orderStatus === value && styles.statusBtnTextActive]}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {invoice.orderStatus !== 'CANCELLED' ? <View style={styles.statusActions}>
+          {invoice.orderStatus === 'CONFIRMED' ? <Button title="تم التسليم" onPress={() => requestStatusUpdate('COMPLETED')} loading={statusLoading} style={styles.deliveryButton} /> : null}
+          <Button title="إلغاء الفاتورة" onPress={() => requestStatusUpdate('CANCELLED')} loading={statusLoading} variant="outline" style={styles.cancelButton} />
+        </View> : null}
       </Card>
 
       <Card style={styles.section}>
@@ -303,6 +307,10 @@ export default function InvoiceDetailScreen() {
 
       <Card style={styles.section}>
         <Text style={styles.sectionTitle}>الملخص المالي</Text>
+        <View style={styles.orderSummaryRow}>
+          <View><Text style={styles.orderSummaryLabel}>عدد الأنواع</Text><Text style={styles.orderSummaryValue}>{invoice.items.length}</Text></View>
+          <View style={styles.orderSummaryRight}><Text style={styles.orderSummaryLabel}>إجمالي الكمية</Text><Text style={styles.orderSummaryValue}>{quantitySummary}</Text></View>
+        </View>
         <View style={styles.calcRow}>
           <Text style={styles.calcLabel}>إجمالي الأصناف قبل الخصم</Text>
           <Text style={styles.calcValue}>{formatMoney(itemsSubtotal)}</Text>
@@ -410,11 +418,8 @@ const styles = StyleSheet.create({
   statusTitleBlock: { flex: 1, alignItems: 'flex-end' },
   statusHint: { color: '#7A8699', fontSize: 12, lineHeight: 18, textAlign: 'right', marginTop: 3 },
   statusActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  statusBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: '#D8E2EF', backgroundColor: '#FFFFFF', alignItems: 'center' },
-  statusBtnActive: { backgroundColor: '#075FD8', borderColor: '#075FD8' },
-  statusBtnDanger: { backgroundColor: '#DC2626', borderColor: '#DC2626' },
-  statusBtnText: { color: '#44546A', fontWeight: 'bold', fontSize: 12 },
-  statusBtnTextActive: { color: '#FFFFFF' },
+  deliveryButton: { flex: 1, marginVertical: 0 },
+  cancelButton: { flex: 1, marginVertical: 0, borderColor: '#FCA5A5' },
   itemRow: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingVertical: 10, gap: 10 },
   itemInfo: { flex: 1, alignItems: 'flex-end' },
   itemName: { color: '#0B1220', fontWeight: 'bold', textAlign: 'right' },
@@ -423,6 +428,8 @@ const styles = StyleSheet.create({
   itemTotal: { color: '#0B1220', fontWeight: 'bold' },
   discountText: { color: '#B45309', fontSize: 12, marginTop: 3 },
   calcRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7 },
+  orderSummaryRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#EAF2FF', borderRadius: 8, padding: 10, marginBottom: 8 },
+  orderSummaryRight: { alignItems: 'flex-end', flex: 1 }, orderSummaryLabel: { color: '#52657C', fontSize: 12 }, orderSummaryValue: { color: '#075FD8', fontWeight: '900', marginTop: 3 },
   calcLabel: { color: '#475569', fontWeight: '600' },
   calcValue: { color: '#0B1220', fontWeight: 'bold' },
   discountValue: { color: '#DC2626', fontWeight: 'bold' },

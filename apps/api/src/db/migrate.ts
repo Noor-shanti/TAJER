@@ -39,6 +39,8 @@ async function runMigrations() {
       unit_id       INTEGER NOT NULL REFERENCES product_units(id),
       name          TEXT    NOT NULL,
       current_price INTEGER NOT NULL CHECK (current_price >= 0),
+      stock_quantity INTEGER NOT NULL DEFAULT 0,
+      reorder_level INTEGER NOT NULL DEFAULT 0,
       is_active     INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
       created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -106,6 +108,18 @@ async function runMigrations() {
       created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id     INTEGER NOT NULL REFERENCES products(id),
+      movement_type  TEXT NOT NULL,
+      quantity_delta INTEGER NOT NULL,
+      balance_after  INTEGER NOT NULL,
+      invoice_id     INTEGER REFERENCES invoices(id),
+      notes          TEXT,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id, created_at DESC);
   `);
 
   // 2. Seed Default Merchant & Data

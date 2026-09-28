@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getDbClient, shouldUseLocalFallback } from '../db/client';
-import { addFallbackAuditLog } from '../db/fallback.store';
+import { addFallbackAuditLog, fallbackStockMovements, getFallbackStock, setFallbackStock } from '../db/fallback.store';
 import { BusinessRuleError, NotFoundError } from '../errors/custom.errors';
 import { writeAuditLog } from '../services/audit.service';
 import { authMiddleware } from '../middleware/auth.middleware';
@@ -10,7 +10,7 @@ import { createProductSchema, updateProductSchema } from '../validators/schemas'
 const productsRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 productsRoutes.use('*', authMiddleware);
 
-const fallbackProducts: any[] = [
+export const fallbackProducts: any[] = [
   { id: 1, name: 'مالبورو أحمر', categoryId: 1, categoryName: 'سجائر', unitId: 1, unitNameAr: 'كروز', currentPrice: 7400, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   { id: 2, name: 'إل إم أزرق', categoryId: 1, categoryName: 'سجائر', unitId: 1, unitNameAr: 'كروز', currentPrice: 6200, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   { id: 3, name: 'وينستون أبيض', categoryId: 1, categoryName: 'سجائر', unitId: 1, unitNameAr: 'كروز', currentPrice: 6800, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
@@ -30,6 +30,7 @@ function mapProduct(row: any) {
     categoryName: row.category_name ? String(row.category_name) : row.categoryName ?? null,
     unitId: Number(row.unit_id ?? row.unitId), unitNameAr: String(row.unit_name_ar ?? row.unitNameAr),
     name: String(row.name), currentPrice: Number(row.current_price ?? row.currentPrice),
+    stockQuantity: Number(row.stock_quantity ?? row.stockQuantity ?? 0), reorderLevel: Number(row.reorder_level ?? row.reorderLevel ?? 0),
     isActive: Boolean(row.is_active ?? row.isActive), createdAt: String(row.created_at ?? row.createdAt), updatedAt: String(row.updated_at ?? row.updatedAt),
   };
 }
@@ -54,7 +55,7 @@ productsRoutes.get('/', async (c) => {
     return c.json({ success: true, data: products, meta: { page: 1, limit: 50, total: products.length, totalPages: 1 } });
   } catch (err) {
     if (!isNoDbConfigured(c.env)) throw err;
-    const filtered = fallbackProducts.filter((p) => p.name.includes(search) || (p.categoryName && p.categoryName.includes(search)));
+    const filtered = fallbackProducts.filter((p) => p.name.includes(search) || (p.categoryName && p.categoryName.includes(search))).map((product) => ({ ...product, stockQuantity: getFallbackStock(product.id).quantity, reorderLevel: getFallbackStock(product.id).reorderLevel }));
     return c.json({ success: true, data: filtered, meta: { page: 1, limit: 50, total: filtered.length, totalPages: 1 } });
   }
 });
@@ -74,7 +75,7 @@ productsRoutes.get('/:id', async (c) => {
     if (err instanceof NotFoundError || !isNoDbConfigured(c.env)) throw err;
     const product = fallbackProducts.find((item) => item.id === id);
     if (!product) throw new NotFoundError('المنتج غير موجود');
-    return c.json({ success: true, data: product });
+    return c.json({ success: true, data: { ...product, stockQuantity: getFallbackStock(product.id).quantity, reorderLevel: getFallbackStock(product.id).reorderLevel } });
   }
 });
 
@@ -85,17 +86,27 @@ productsRoutes.post('/', async (c) => {
 
   try {
     const db = getDbClient(c.env);
-    const result = await db.execute({
-      sql: 'INSERT INTO products (name, category_id, unit_id, current_price) VALUES (?, ?, ?, ?) RETURNING id, created_at, updated_at',
-      args: [data.name, data.categoryId || null, data.unitId, data.currentPrice],
-    });
-    const row = result.rows[0]!;
-    await writeAuditLog(db, 'PRODUCT', Number(row.id), 'CREATED', `تمت إضافة المنتج: ${data.name}`);
-    return c.json({ success: true, data: { id: Number(row.id), name: data.name, categoryId: data.categoryId || null, unitId: data.unitId, currentPrice: data.currentPrice, isActive: true, createdAt: String(row.created_at), updatedAt: String(row.updated_at) } }, 201);
+    const tx = await db.transaction('write');
+    try {
+      const result = await tx.execute({
+        sql: 'INSERT INTO products (name, category_id, unit_id, current_price, stock_quantity, reorder_level) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at, updated_at',
+        args: [data.name, data.categoryId || null, data.unitId, data.currentPrice, data.stockQuantity, data.reorderLevel],
+      });
+      const row = result.rows[0]!;
+      const productId = Number(row.id);
+      if (data.stockQuantity > 0) {
+        await tx.execute({ sql: 'INSERT INTO stock_movements (product_id, movement_type, quantity_delta, balance_after, notes) VALUES (?, ?, ?, ?, ?)', args: [productId, 'ADJUSTMENT', data.stockQuantity, data.stockQuantity, 'الكمية الافتتاحية للمنتج'] });
+      }
+      await writeAuditLog(tx, 'PRODUCT', productId, 'CREATED', `تمت إضافة المنتج: ${data.name}`);
+      await tx.commit();
+      return c.json({ success: true, data: { id: productId, name: data.name, categoryId: data.categoryId || null, unitId: data.unitId, currentPrice: data.currentPrice, stockQuantity: data.stockQuantity, reorderLevel: data.reorderLevel, isActive: true, createdAt: String(row.created_at), updatedAt: String(row.updated_at) } }, 201);
+    } catch (err) { await tx.rollback(); throw err; }
   } catch (err) {
     if (!isNoDbConfigured(c.env)) throw err;
-    const newProd = { id: fallbackProducts.length + 1, name: data.name, categoryId: data.categoryId || null, categoryName: null, unitId: data.unitId, unitNameAr: fallbackUnitName(data.unitId), currentPrice: data.currentPrice, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const newProd = { id: fallbackProducts.length + 1, name: data.name, categoryId: data.categoryId || null, categoryName: null, unitId: data.unitId, unitNameAr: fallbackUnitName(data.unitId), currentPrice: data.currentPrice, stockQuantity: data.stockQuantity, reorderLevel: data.reorderLevel, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     fallbackProducts.unshift(newProd);
+    setFallbackStock(newProd.id, data.stockQuantity, data.reorderLevel);
+    if (data.stockQuantity > 0) fallbackStockMovements.unshift({ id: fallbackStockMovements.length + 1, productId: newProd.id, movementType: 'ADJUSTMENT', quantityDelta: data.stockQuantity, balanceAfter: data.stockQuantity, invoiceId: null, notes: 'الكمية الافتتاحية للمنتج', createdAt: new Date().toISOString() });
     addFallbackAuditLog('PRODUCT', newProd.id, 'CREATED', `تمت إضافة المنتج: ${data.name}`);
     return c.json({ success: true, data: newProd }, 201);
   }

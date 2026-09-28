@@ -59,10 +59,10 @@ export default function InvoicesListScreen() {
           <Input placeholder="إلى YYYY-MM-DD" value={toDate} onChangeText={setToDate} style={styles.dateInput} />
         </View>
         <View style={styles.actionRow}>
-          <Button title="تقرير المبيعات" onPress={() => router.push('/(app)/invoices/report')} variant="secondary" style={styles.actionBtn} />
+          <Button title="تقرير المبيعات" onPress={() => router.push({ pathname: '/(app)/invoices/report', params: { returnTo: '/(app)/invoices' } })} variant="secondary" style={styles.actionBtn} />
           <Button
             title="طلبية جديدة"
-            onPress={() => router.push({ pathname: '/(app)/invoices/new', params: { draftId: String(Date.now()) } })}
+            onPress={() => router.push({ pathname: '/(app)/invoices/new', params: { draftId: String(Date.now()), returnTo: '/(app)/invoices' } })}
             style={styles.actionBtn}
           />
         </View>
@@ -92,7 +92,7 @@ export default function InvoicesListScreen() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={!isLoading ? <Text style={styles.emptyText}>لا توجد طلبيات مطابقة</Text> : null}
         renderItem={({ item }) => (
-          <TouchableOpacity onPress={() => router.push(`/(app)/invoices/${item.id}`)}>
+          <TouchableOpacity onPress={() => router.push({ pathname: '/(app)/invoices/[id]', params: { id: item.id, returnTo: '/(app)/invoices' } })}>
             <Card style={styles.invoiceCard}>
               <View style={styles.cardHeader}>
                 <Badge

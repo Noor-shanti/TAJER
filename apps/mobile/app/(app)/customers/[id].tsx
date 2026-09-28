@@ -57,7 +57,7 @@ export default function CustomerDetailScreen() {
           onPress={() =>
             router.push({
               pathname: '/(app)/invoices/new',
-              params: { customerId, customerName: customer?.name || '', draftId: String(Date.now()) },
+              params: { customerId, customerName: customer?.name || '', draftId: String(Date.now()), returnTo: `/(app)/customers/${customerId}` },
             })
           }
           style={styles.newInvoiceBtn}
@@ -90,7 +90,7 @@ export default function CustomerDetailScreen() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={!isLoading ? <Text style={styles.emptyText}>لا توجد طلبيات في هذا القسم</Text> : null}
         renderItem={({ item }) => (
-          <TouchableOpacity onPress={() => router.push(`/(app)/invoices/${item.id}`)}>
+          <TouchableOpacity onPress={() => router.push({ pathname: '/(app)/invoices/[id]', params: { id: item.id, returnTo: `/(app)/customers/${customerId}` } })}>
             <Card style={styles.invoiceCard}>
               <View style={styles.invoiceHeader}>
                 <Badge

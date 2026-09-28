@@ -6,10 +6,11 @@ import {
   validatePaymentAmount,
 } from '@merchant/shared';
 import { getDbClient, shouldUseLocalFallback } from '../db/client';
-import { addFallbackAuditLog, fallbackCustomers, fallbackInvoices } from '../db/fallback.store';
+import { addFallbackAuditLog, fallbackCustomers, fallbackInvoices, getFallbackStock, moveFallbackStock } from '../db/fallback.store';
 import { BusinessRuleError, NotFoundError } from '../errors/custom.errors';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { writeAuditLog } from '../services/audit.service';
+import { moveStock } from '../services/inventory.service';
 import type { Env, Variables } from '../types/env.types';
 import { createInvoiceSchema, createPaymentSchema } from '../validators/schemas';
 
@@ -343,6 +344,9 @@ invoicesRoutes.post('/', async (c) => {
       await tx.execute({ sql: 'UPDATE invoices SET invoice_number = ? WHERE id = ?', args: [invoiceNumber, invoiceId] });
 
       for (const item of processedItems) {
+        if (item.productId) {
+          await moveStock(tx, item.productId, -item.quantity, 'SALE', invoiceId, `بيع في الفاتورة ${invoiceNumber}`);
+        }
         await tx.execute({
           sql: `INSERT INTO invoice_items
                   (invoice_id, product_id, product_name_snapshot, unit_name_snapshot, unit_price, discount_type, discount_value, line_subtotal, line_total, quantity)
@@ -380,6 +384,11 @@ invoicesRoutes.post('/', async (c) => {
     }
   }
 
+  for (const item of processedItems) {
+    if (item.productId && getFallbackStock(item.productId).quantity < item.quantity) {
+      throw new BusinessRuleError(`المتوفر من ${item.productNameSnapshot} لا يكفي لإتمام الطلبية`);
+    }
+  }
   const seq = fallbackInvoices.length + 1;
   const invoiceNumber = `INV-${String(seq).padStart(6, '0')}`;
   const newInv = {
@@ -401,6 +410,9 @@ invoicesRoutes.post('/', async (c) => {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+  for (const item of processedItems) {
+    if (item.productId) moveFallbackStock(item.productId, -item.quantity, 'SALE', seq, `بيع في الفاتورة ${invoiceNumber}`);
+  }
   fallbackInvoices.unshift(newInv);
   addFallbackAuditLog('INVOICE', seq, 'CREATED', `تم إنشاء الفاتورة ${invoiceNumber}`);
   return c.json({ success: true, data: { id: seq, invoiceNumber, total, amountPaid: initialPayment, remaining, paymentStatus } }, 201);
@@ -497,20 +509,45 @@ invoicesRoutes.patch('/:id/status', async (c) => {
   const noDb = isNoDbConfigured(c.env);
   if (!noDb) {
     const db = getDbClient(c.env);
-    const result = await db.execute({
-      sql: 'UPDATE invoices SET order_status = ?, updated_at = datetime(\'now\') WHERE id = ? RETURNING id',
-      args: [orderStatus, invoiceId],
-    });
-    if (result.rows.length === 0) throw new NotFoundError('الفاتورة غير موجودة');
-    await writeAuditLog(db, 'INVOICE', invoiceId, orderStatus === 'CANCELLED' ? 'CANCELLED' : 'STATUS_UPDATED', orderStatus === 'CANCELLED' ? 'تم إلغاء الفاتورة' : 'تم تحديث حالة الطلبية');
-    return c.json({ success: true, data: { id: invoiceId, orderStatus } });
+    const tx = await db.transaction('write');
+    try {
+      const invoiceResult = await tx.execute({ sql: 'SELECT invoice_number, order_status FROM invoices WHERE id = ?', args: [invoiceId] });
+      const invoice = invoiceResult.rows[0];
+      if (!invoice) throw new NotFoundError('الفاتورة غير موجودة');
+      const previousStatus = String(invoice.order_status);
+      if (previousStatus !== orderStatus && (previousStatus === 'CANCELLED' || orderStatus === 'CANCELLED')) {
+        const itemsResult = await tx.execute({ sql: 'SELECT product_id, quantity FROM invoice_items WHERE invoice_id = ?', args: [invoiceId] });
+        for (const item of itemsResult.rows) {
+          if (!item.product_id) continue;
+          const delta = orderStatus === 'CANCELLED' ? Number(item.quantity) : -Number(item.quantity);
+          await moveStock(tx, Number(item.product_id), delta, orderStatus === 'CANCELLED' ? 'CANCELLATION' : 'SALE', invoiceId, orderStatus === 'CANCELLED' ? `إلغاء الفاتورة ${String(invoice.invoice_number)}` : `إعادة تفعيل الفاتورة ${String(invoice.invoice_number)}`);
+        }
+      }
+      await tx.execute({ sql: "UPDATE invoices SET order_status = ?, updated_at = datetime('now') WHERE id = ?", args: [orderStatus, invoiceId] });
+      await writeAuditLog(tx, 'INVOICE', invoiceId, orderStatus === 'CANCELLED' ? 'CANCELLED' : 'STATUS_UPDATED', orderStatus === 'CANCELLED' ? 'تم إلغاء الفاتورة وإرجاع الأصناف للمتوفر' : 'تم تحديث حالة الطلبية');
+      await tx.commit();
+      return c.json({ success: true, data: { id: invoiceId, orderStatus } });
+    } catch (err) {
+      try { await tx.rollback(); } catch { /* already rolled back */ }
+      throw err;
+    }
   }
 
   const inv = fallbackInvoices.find((i) => i.id === invoiceId);
   if (!inv) throw new NotFoundError('الفاتورة غير موجودة');
+  if (inv.orderStatus !== orderStatus && (inv.orderStatus === 'CANCELLED' || orderStatus === 'CANCELLED')) {
+    for (const item of inv.items || []) {
+      if (item.productId && orderStatus !== 'CANCELLED' && getFallbackStock(item.productId).quantity < item.quantity) {
+        throw new BusinessRuleError(`لا يمكن إعادة تفعيل الفاتورة، المتوفر من ${item.productNameSnapshot} لا يكفي`);
+      }
+    }
+    for (const item of inv.items || []) {
+      if (item.productId) moveFallbackStock(item.productId, orderStatus === 'CANCELLED' ? item.quantity : -item.quantity, orderStatus === 'CANCELLED' ? 'CANCELLATION' : 'SALE', invoiceId, orderStatus === 'CANCELLED' ? `إلغاء الفاتورة ${inv.invoiceNumber}` : `إعادة تفعيل الفاتورة ${inv.invoiceNumber}`);
+    }
+  }
   inv.orderStatus = orderStatus;
   inv.updatedAt = new Date().toISOString();
-  addFallbackAuditLog('INVOICE', invoiceId, orderStatus === 'CANCELLED' ? 'CANCELLED' : 'STATUS_UPDATED', orderStatus === 'CANCELLED' ? 'تم إلغاء الفاتورة' : 'تم تحديث حالة الطلبية');
+  addFallbackAuditLog('INVOICE', invoiceId, orderStatus === 'CANCELLED' ? 'CANCELLED' : 'STATUS_UPDATED', orderStatus === 'CANCELLED' ? 'تم إلغاء الفاتورة وإرجاع الأصناف للمتوفر' : 'تم تحديث حالة الطلبية');
   return c.json({ success: true, data: { id: invoiceId, orderStatus } });
 });
 

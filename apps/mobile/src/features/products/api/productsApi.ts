@@ -6,6 +6,8 @@ export interface CreateProductPayload {
   unitId: number;
   currentPrice: number; // Minor units
   categoryId?: number;
+  stockQuantity: number;
+  reorderLevel: number;
 }
 
 export type UpdateProductPayload = Partial<CreateProductPayload> & { isActive?: boolean };

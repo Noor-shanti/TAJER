@@ -31,7 +31,7 @@ export default function CustomersScreen() {
           onChangeText={setSearch}
           style={styles.searchInput}
         />
-        <Button title="إضافة زبون" onPress={() => router.push('/(app)/customers/new')} style={styles.addBtn} />
+        <Button title="إضافة زبون" onPress={() => router.push({ pathname: '/(app)/customers/new', params: { returnTo: '/(app)/customers' } })} style={styles.addBtn} />
       </View>
 
       <FlatList
@@ -42,7 +42,7 @@ export default function CustomersScreen() {
         ListEmptyComponent={!isLoading ? <Text style={styles.emptyText}>لا يوجد زبائن مطابقون</Text> : null}
         renderItem={({ item }) => (
           <Card style={styles.customerCard}>
-            <TouchableOpacity style={styles.customerMain} onPress={() => router.push(`/(app)/customers/${item.id}`)}>
+            <TouchableOpacity style={styles.customerMain} onPress={() => router.push({ pathname: '/(app)/customers/[id]', params: { id: item.id, returnTo: '/(app)/customers' } })}>
               <View style={styles.balanceBlock}>
                 <Text style={styles.balanceLabel}>الذمة</Text>
                 <Text style={item.totalRemaining > 0 ? styles.balanceDanger : styles.balanceClean}>
@@ -61,19 +61,16 @@ export default function CustomersScreen() {
             </TouchableOpacity>
 
             <View style={styles.actionsRow}>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push(`/(app)/customers/${item.id}`)}>
-                <Text style={styles.secondaryBtnText}>سجل الزبون</Text>
-              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.primaryBtn}
                 onPress={() =>
                   router.push({
                     pathname: '/(app)/invoices/new',
-                    params: { customerId: item.id, customerName: item.name, draftId: String(Date.now()) },
+                    params: { customerId: item.id, customerName: item.name, draftId: String(Date.now()), returnTo: '/(app)/customers' },
                   })
                 }
               >
-                <Text style={styles.primaryBtnText}>طلبية جديدة</Text>
+                <Text style={styles.primaryBtnText}>تجهيز طلبية</Text>
               </TouchableOpacity>
             </View>
           </Card>
@@ -102,8 +99,6 @@ const styles = StyleSheet.create({
   balanceDanger: { color: '#DC2626', fontWeight: '900', fontSize: 15, marginTop: 3 },
   balanceClean: { color: '#16A34A', fontWeight: '900', fontSize: 15, marginTop: 3 },
   actionsRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  primaryBtn: { flex: 1, backgroundColor: BLUE, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  primaryBtn: { flex: 1, backgroundColor: BLUE, borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
   primaryBtnText: { color: '#FFFFFF', fontWeight: '900' },
-  secondaryBtn: { flex: 1, backgroundColor: '#EAF2FF', borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-  secondaryBtnText: { color: BLUE, fontWeight: '900' },
 });

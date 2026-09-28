@@ -40,6 +40,7 @@ export type {
   Category,
   ProductUnit,
   Product,
+  StockMovement,
   InvoiceItem,
   Invoice,
   InvoiceListItem,
